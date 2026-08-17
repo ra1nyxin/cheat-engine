@@ -1,0 +1,146 @@
+name: Build and publish Windows release
+
+on:
+  push:
+    branches:
+      - main
+      - master
+  workflow_dispatch:
+
+# The workflow only writes the ci-latest tag and its associated prerelease.
+permissions:
+  contents: write
+
+# A newer push supersedes an older build.  This also serializes updates to the
+# mutable ci-latest release, so two runs cannot overwrite each other's assets.
+concurrency:
+  group: cheat-engine-release-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-and-release:
+    name: Build Windows binaries and publish
+    runs-on: windows-2022
+    timeout-minutes: 90
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install the pinned Lazarus toolchain
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $installer = Join-Path $env:RUNNER_TEMP 'lazarus-2.2.2-fpc-3.2.2-win64.exe'
+          $crossInstaller = Join-Path $env:RUNNER_TEMP 'lazarus-2.2.2-fpc-3.2.2-cross-i386-win32-win64.exe'
+          $baseUrl = 'https://sourceforge.net/projects/lazarus/files/Lazarus%20Windows%2064%20bits/Lazarus%202.2.2'
+
+          function Get-Installer([string] $fileName, [string] $destination) {
+            $url = "$baseUrl/$fileName/download"
+            for ($attempt = 1; $attempt -le 3; $attempt++) {
+              try {
+                Invoke-WebRequest -Uri $url -OutFile $destination -MaximumRedirection 10
+                if ((Get-Item $destination).Length -gt 1MB) { return }
+              } catch {
+                if ($attempt -eq 3) { throw }
+              }
+              Start-Sleep -Seconds (5 * $attempt)
+            }
+            throw "Downloaded installer is unexpectedly small: $fileName"
+          }
+
+          Get-Installer 'lazarus-2.2.2-fpc-3.2.2-win64.exe' $installer
+          Get-Installer 'lazarus-2.2.2-fpc-3.2.2-cross-i386-win32-win64.exe' $crossInstaller
+          Start-Process -FilePath $installer -ArgumentList '/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', '/SP-' -Wait
+          Start-Process -FilePath $crossInstaller -ArgumentList '/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', '/SP-' -Wait
+
+          $lazbuild = Get-ChildItem 'C:\lazarus\lazbuild.exe', 'C:\Program Files\Lazarus\lazbuild.exe' -ErrorAction SilentlyContinue | Select-Object -First 1
+          if (-not $lazbuild) { throw 'Lazarus installation succeeded but lazbuild.exe was not found.' }
+          "LAZBUILD=$($lazbuild.FullName)" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          & $lazbuild.FullName '--version'
+
+      - name: Build static FPC executables
+        shell: pwsh
+        working-directory: Cheat Engine
+        run: |
+          $ErrorActionPreference = 'Stop'
+          # FPC links the Pascal/LCL code into each EXE.  The remaining DLLs are
+          # deliberate optional CE components and are shipped in the archive.
+          & $env:LAZBUILD '--build-mode=Release 32-Bit' '--build-all' 'cheatengine.lpi'
+          if ($LASTEXITCODE -ne 0) { throw 'The 32-bit release build failed.' }
+          & $env:LAZBUILD '--build-mode=Release 64-Bit' '--build-all' 'cheatengine.lpi'
+          if ($LASTEXITCODE -ne 0) { throw 'The 64-bit release build failed.' }
+          & $env:LAZBUILD '--build-mode=Release 64-Bit O4 AVX2' '--build-all' 'cheatengine.lpi'
+          if ($LASTEXITCODE -ne 0) { throw 'The AVX2 64-bit release build failed.' }
+
+      - name: Validate the release payload
+        shell: pwsh
+        working-directory: Cheat Engine
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $required = @(
+            'bin\cheatengine-i386.exe',
+            'bin\cheatengine-x86_64.exe',
+            'bin\cheatengine-x86_64-SSE4-AVX2.exe',
+            'bin\lua53-32.dll',
+            'bin\lua53-64.dll',
+            'bin\libmikmod32.dll',
+            'bin\libmikmod64.dll',
+            'bin\libipt-32.dll',
+            'bin\libipt-64.dll',
+            'bin\main.lua',
+            'bin\autorun',
+            'bin\win32\dbghelp.dll',
+            'bin\win64\dbghelp.dll'
+          )
+          $missing = $required | Where-Object { -not (Test-Path $_) }
+          if ($missing) { throw "Release payload is incomplete:`n$($missing -join "`n")" }
+
+          $dynamicRuntime = Select-String -Path 'bin\cheatengine-*.exe' -Pattern 'libgcc_s_|libstdc\+\+|libwinpthread' -SimpleMatch:$false
+          if ($dynamicRuntime) { throw "Unexpected MinGW runtime dependency found: $($dynamicRuntime.Path -join ', ')" }
+
+      - name: Package release and checksums
+        id: package
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $assetName = "CheatEngine-Windows-$($env:GITHUB_SHA.Substring(0, 12)).zip"
+          $staging = Join-Path $env:RUNNER_TEMP 'CheatEngine-Windows'
+          $payload = Join-Path $staging 'CheatEngine'
+          Remove-Item $staging -Recurse -Force -ErrorAction SilentlyContinue
+          New-Item -ItemType Directory -Path $payload -Force | Out-Null
+          Copy-Item 'Cheat Engine\bin' (Join-Path $payload 'bin') -Recurse -Force
+          Compress-Archive -Path $payload -DestinationPath $assetName -CompressionLevel Optimal
+          (Get-FileHash $assetName -Algorithm SHA256).Hash.ToLower() + "  $assetName" | Set-Content "$assetName.sha256" -NoNewline
+          "asset_name=$assetName" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+
+      - name: Publish the rolling prerelease
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ASSET_NAME: ${{ steps.package.outputs.asset_name }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git tag --force ci-latest $env:GITHUB_SHA
+          git push --force origin refs/tags/ci-latest
+
+          gh release view ci-latest *> $null
+          if ($LASTEXITCODE -ne 0) {
+            gh release create ci-latest --target $env:GITHUB_SHA --title 'Latest automated build' --notes "Automated build from $env:GITHUB_SHA" --prerelease
+          } else {
+            gh release edit ci-latest --target $env:GITHUB_SHA --title 'Latest automated build' --notes "Automated build from $env:GITHUB_SHA" --prerelease
+          }
+          gh release upload ci-latest $env:ASSET_NAME "$env:ASSET_NAME.sha256" --clobber
+
+      - name: Upload payload for failed release jobs
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: failed-cheat-engine-build-${{ github.sha }}
+          path: Cheat Engine/bin
+          if-no-files-found: ignore
+          retention-days: 7
