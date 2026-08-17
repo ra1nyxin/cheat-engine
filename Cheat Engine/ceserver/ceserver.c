@@ -1,6 +1,7 @@
 
 #include <stdio.h>
 #include <stdlib.h>
+#include <limits.h>
 #include <pthread.h>
 #include <sys/select.h>
 #include <sys/socket.h>
@@ -1362,21 +1363,26 @@ case CMD_SETTHREADCONTEXT:
     {
       CeReadPipe c;
       int32_t count=0;
+      void *buf=NULL;
       recvall(currentsocket, &c, sizeof(c),0);
 
-      debug_log("CMD_PIPEREAD: %d bytes\n",c.size);
-      if (c.size)
+      debug_log("CMD_PIPEREAD: %u bytes\n",c.size);
+      if ((c.size>0) && (c.size<=INT_MAX))
       {
-        void *buf=malloc(c.size);
-        count=ReadPipe(c.hPipe, buf, c.size, c.timeout);
-
-        sendall(currentsocket, &count, sizeof(count), count>0?MSG_MORE:0); //can be negative
-        if (count>0)
-          sendall(currentsocket, buf, count,0);
+        buf=malloc(c.size);
+        if (buf)
+          count=ReadPipe(c.hPipe, buf, (int)c.size, c.timeout);
+        else
+          debug_log("CMD_PIPEREAD: failed to allocate %u bytes\n", c.size);
       }
-      else
-        sendall(currentsocket, &count, sizeof(count), 0);
+      else if (c.size>INT_MAX)
+        debug_log("CMD_PIPEREAD: requested size is too large: %u bytes\n", c.size);
 
+      sendall(currentsocket, &count, sizeof(count), count>0?MSG_MORE:0); //can be negative
+      if (count>0)
+        sendall(currentsocket, buf, count,0);
+
+      free(buf);
 
       break;
     }

@@ -3935,19 +3935,29 @@ HANDLE OpenPipe(char *pipename, int timeout) //the \\.\pipe\ part has already be
   int i;
   int s;
   int al;
-  char name[256];
+  size_t pipenamelength;
+  struct sockaddr_un address;
+
+  if (pipename==NULL)
+    return 0;
+
+  pipenamelength=strlen(pipename);
+  if (pipenamelength > sizeof(address.sun_path)-2)
+  {
+    debug_log("OpenPipe: pipe name is too long (%zu bytes)\n", pipenamelength);
+    return 0;
+  }
+
   debug_log("OpenPipe(\"%s\")", pipename);
   s=socket(AF_UNIX, SOCK_STREAM, 0);
+  if (s==-1)
+    return 0;
 
-  sprintf(name, " %s",pipename);
-
-  struct sockaddr_un address;
+  memset(&address, 0, sizeof(address));
   address.sun_family=AF_UNIX;
-  strcpy(address.sun_path, name);
-
-  al=SUN_LEN(&address);
-
   address.sun_path[0]=0;
+  memcpy(address.sun_path+1, pipename, pipenamelength);
+  al=(int)(offsetof(struct sockaddr_un, sun_path)+1+pipenamelength);
 
   debug_log("trying to connect to %s\n", pipename);
   i=connect(s, (struct sockaddr *)&address, al);
