@@ -8584,7 +8584,6 @@ begin
     begin
       cenorm[3]:='E';
       cenorm[4]:='A';
-      caption:=cenorm;
     end;
     EnableCheatECoinSystem;
   end;
@@ -8959,9 +8958,6 @@ begin
   end;
 
   ActivePreviousResultColumn:=2;
-
-  if runningAsAdmin then
-    caption:=caption+' (Admin)';
 
   askAboutRunningAsAdmin:=true;
 

@@ -143,8 +143,34 @@ uses
 {$R Images.res}
 {$endif}
 
+{$ifdef windows}
+function SystemFunction036(RandomBuffer: Pointer; RandomBufferLength: Cardinal): LongBool; stdcall; external 'advapi32.dll';
+{$endif}
 
+function GenerateRandomWindowTitle: string;
+const
+  TitleCharacters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+var
+  RandomBytes: array[0..20] of Byte;
+  I, TitleLength: Integer;
+begin
+  {$ifdef windows}
+  if SystemFunction036(@RandomBytes, SizeOf(RandomBytes)) then
+  begin
+    TitleLength := 12 + (RandomBytes[0] mod 9);
+    SetLength(Result, TitleLength);
+    for I := 1 to TitleLength do
+      Result[I] := TitleCharacters[1 + (RandomBytes[I] mod Length(TitleCharacters))];
+    Exit;
+  end;
+  {$endif}
 
+  Randomize;
+  TitleLength := 12 + Random(9);
+  SetLength(Result, TitleLength);
+  for I := 1 to TitleLength do
+    Result[I] := TitleCharacters[1 + Random(Length(TitleCharacters))];
+end;
 
 procedure HandleParameters;
 {Keep in mind: Responsible for not making the mainform visible}
@@ -288,9 +314,11 @@ var
 
   path: string;
   noautorun: boolean;
+  startupWindowTitle: string;
 
 begin
-  Application.Title:='Cheat Engine 7.5';
+  startupWindowTitle:=GenerateRandomWindowTitle;
+  Application.Title:=startupWindowTitle;
  //'Cheat Engine 7.3';
   {$ifdef darwin}
   macPortFixRegPath;
@@ -405,6 +433,8 @@ begin
   {$endif}
 
   initcetitle;
+  Application.Title:=startupWindowTitle;
+  MainForm.Caption:=startupWindowTitle;
   {$ifdef darwin}
   macPortFixRegPath;
   {$endif}
