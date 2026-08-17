@@ -1,6 +1,6 @@
 <p align="center">
   <a href="https://github.com/ra1nyxin/cheat-engine">
-    <img src="https://github.com/cheat-engine/cheat-engine/raw/master/Cheat%20Engine/images/celogo.png" alt="Cheat Engine 徽标" />
+    <img src="Cheat%20Engine/images/celogo.png" alt="Cheat Engine 徽标" />
   </a>
 </p>
 
