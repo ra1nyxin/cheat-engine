@@ -35,20 +35,20 @@ jobs:
           $ErrorActionPreference = 'Stop'
           $installer = Join-Path $env:RUNNER_TEMP 'lazarus-2.2.2-fpc-3.2.2-win64.exe'
           $crossInstaller = Join-Path $env:RUNNER_TEMP 'lazarus-2.2.2-fpc-3.2.2-cross-i386-win32-win64.exe'
-          $baseUrl = 'https://sourceforge.net/projects/lazarus/files/Lazarus%20Windows%2064%20bits/Lazarus%202.2.2'
+          $baseUrl = 'https://downloads.sourceforge.net/project/lazarus/Lazarus%20Windows%2064%20bits/Lazarus%202.2.2'
 
           function Get-Installer([string] $fileName, [string] $destination) {
-            $url = "$baseUrl/$fileName/download"
+            $url = "$baseUrl/$fileName"
             for ($attempt = 1; $attempt -le 3; $attempt++) {
-              try {
-                Invoke-WebRequest -Uri $url -OutFile $destination -MaximumRedirection 10
-                if ((Get-Item $destination).Length -gt 1MB) { return }
-              } catch {
-                if ($attempt -eq 3) { throw }
+              Remove-Item $destination -Force -ErrorAction SilentlyContinue
+              & curl.exe --fail --location --retry 5 --retry-all-errors --connect-timeout 30 --output $destination $url
+              if ($LASTEXITCODE -eq 0 -and (Test-Path $destination) -and (Get-Item $destination).Length -gt 1MB) {
+                $magic = Get-Content $destination -AsByteStream -TotalCount 2
+                if ($magic.Count -eq 2 -and $magic[0] -eq 0x4d -and $magic[1] -eq 0x5a) { return }
               }
+              if ($attempt -eq 3) { throw "Could not download a valid Lazarus installer: $fileName" }
               Start-Sleep -Seconds (5 * $attempt)
             }
-            throw "Downloaded installer is unexpectedly small: $fileName"
           }
 
           Get-Installer 'lazarus-2.2.2-fpc-3.2.2-win64.exe' $installer
