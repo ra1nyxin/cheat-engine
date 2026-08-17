@@ -1301,7 +1301,6 @@ resourcestring
   rsHexadecimal = 'Hexadecimal';
   rsIsNotAValidX = '%s is not a valid xml name';
   rsMUGenerateGroupscanCommand = 'Generate groupscan command';
-  rsTryTutorial = 'Do you want to try out the tutorial?';
   rsUnspecifiedError = 'Unspecified error';
   rsGroupscanDataInvalid = 'groupscan data invalid';
   rsGroupscanResultWithNoGroupscanparser = 'Groupscan result with no groupscanparser';
@@ -8521,18 +8520,6 @@ begin
         formsettings.btnSelectLanguage.Click;
       end;
     end;
-
-
-    if messagedlg(rsTryTutorial, mtConfirmation, [mbYes, mbNo], 0) = mrYes then
-    {$ifdef darwin}
-      miTutorial64.click;
-    {$else}
-      {$ifdef cpu32}
-      miTutorial.Click;
-      {$else}
-      miTutorial64.Click;
-      {$endif}
-    {$endif}
   end;
 
   if reg.ValueExists('Show previous value column') then
