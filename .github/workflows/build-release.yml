@@ -106,7 +106,7 @@ jobs:
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
-          $assetName = "CheatEngine-Windows-$($env:GITHUB_SHA.Substring(0, 12)).zip"
+          $assetName = "CheatEngine-Windows-x86-x64-AVX2-$($env:GITHUB_SHA.Substring(0, 12)).zip"
           $staging = Join-Path $env:RUNNER_TEMP 'CheatEngine-Windows'
           $payload = Join-Path $staging 'CheatEngine'
           Remove-Item $staging -Recurse -Force -ErrorAction SilentlyContinue
@@ -128,13 +128,37 @@ jobs:
           git tag --force ci-latest $env:GITHUB_SHA
           git push --force origin refs/tags/ci-latest
 
+          $releaseNotes = @"
+          ## 构建信息
+
+          - 提交：$env:GITHUB_SHA
+          - 构建来源：``$env:GITHUB_SERVER_URL/$env:GITHUB_REPOSITORY/actions/runs/$env:GITHUB_RUN_ID``
+
+          ## 压缩包内容
+
+          请完整解压后再运行，不要单独移动可执行文件。压缩包同时包含以下 Windows 程序：
+
+          - ``bin\cheatengine-i386.exe``：32 位 Windows。
+          - ``bin\cheatengine-x86_64.exe``：通用 64 位 Windows，推荐大多数电脑使用。
+          - ``bin\cheatengine-x86_64-SSE4-AVX2.exe``：支持 AVX2 指令集的 64 位电脑。
+
+          同时包含 Lua、调试符号、Direct3D Hook 和其他运行所需文件。``.sha256`` 文件用于验证压缩包完整性。
+          "@
+
           gh release view ci-latest *> $null
           if ($LASTEXITCODE -ne 0) {
-            gh release create ci-latest --target $env:GITHUB_SHA --title 'Latest automated build' --notes "Automated build from $env:GITHUB_SHA" --prerelease
+            gh release create ci-latest --target $env:GITHUB_SHA --title 'Cheat Engine Windows 自动构建' --notes $releaseNotes --prerelease
           } else {
-            gh release edit ci-latest --target $env:GITHUB_SHA --title 'Latest automated build' --notes "Automated build from $env:GITHUB_SHA" --prerelease
+            gh release edit ci-latest --target $env:GITHUB_SHA --title 'Cheat Engine Windows 自动构建' --notes $releaseNotes --prerelease
           }
-          gh release upload ci-latest $env:ASSET_NAME "$env:ASSET_NAME.sha256" --clobber
+
+          $oldAssets = gh release view ci-latest --json assets --jq '.assets[].name'
+          if ($LASTEXITCODE -ne 0) { throw 'Could not list existing release assets.' }
+          foreach ($oldAsset in $oldAssets) {
+            gh release delete-asset ci-latest $oldAsset --yes
+            if ($LASTEXITCODE -ne 0) { throw "Could not delete stale release asset: $oldAsset" }
+          }
+          gh release upload ci-latest "$env:ASSET_NAME#Windows x86、x64 与 AVX2 完整包" "$env:ASSET_NAME.sha256#SHA-256 校验文件" --clobber
 
       - name: Upload payload for failed release jobs
         if: failure()
