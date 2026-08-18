@@ -300,7 +300,8 @@ int perfmon_interrupt_centry(void)
 		else
 		{
 			DbgPrint("ExAllocatePool has failed\n");
-			KeLowerIrql(old);
+			if (changedIRQL)
+				KeLowerIrql(old);
 			disableInterrupts();
 			return causedbyme;
 		}
