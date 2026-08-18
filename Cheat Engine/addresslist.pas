@@ -2150,13 +2150,17 @@ begin
 
 
 
-   {
-        //default: this is good
-        sender.canvas.Line(checkbox.left+1,checkbox.Top+1, checkbox.Right-1,checkbox.bottom-1);
-        sender.canvas.line(checkbox.left+1,checkbox.bottom-2, checkbox.right-1,checkbox.top);  }
-
-        sender.canvas.Line(checkbox.left,checkbox.Top, checkbox.Right-1,checkbox.bottom-1);
-        sender.canvas.line(checkbox.left,checkbox.bottom-1, checkbox.right-1,checkbox.top);
+        sender.canvas.pen.Width:=max(2, bordersize);
+        sender.canvas.MoveTo(
+          checkbox.left+(checkbox.right-checkbox.left) div 5,
+          checkbox.top+(checkbox.bottom-checkbox.top) div 2);
+        sender.canvas.LineTo(
+          checkbox.left+2*(checkbox.right-checkbox.left) div 5,
+          checkbox.bottom-(checkbox.bottom-checkbox.top) div 5);
+        sender.canvas.LineTo(
+          checkbox.right-(checkbox.right-checkbox.left) div 6,
+          checkbox.top+(checkbox.bottom-checkbox.top) div 4);
+        sender.canvas.pen.Width:=bordersize;
 
         sender.canvas.pen.color:=oldpencolor;
 
@@ -2185,7 +2189,7 @@ begin
 
       end;
 
-      //draw the rectangle over the cross
+      //draw the rectangle over the checkmark
       if memrec.isSelected then
         sender.canvas.pen.color:=checkboxSelectedColor
       else
@@ -2513,8 +2517,8 @@ begin
 
 
 
-  checkboxActiveSelectedColor:=clRed;
-  CheckboxActiveColor:=clRed;
+  checkboxActiveSelectedColor:=clLime;
+  CheckboxActiveColor:=clGreen;
   CheckboxSelectedColor:=clWindowtext;
   CheckboxColor:=clWindowtext;
   SelectedBackgroundColor:=clHighlight;
