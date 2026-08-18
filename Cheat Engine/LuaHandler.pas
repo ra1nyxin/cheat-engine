@@ -773,24 +773,19 @@ begin
   lua_pop(LuaVM,1);
 
 
-  f:='main.lua';
   {$ifdef darwin}
   f:=extractfiledir(extractfiledir(Application.ExeName))+'/Lua/main.lua';
-  {$endif}
-  if not FileExists(f) then //perhaps in the cedir
-  begin
+  if not FileExists(f) then
     f:=CheatEngineDir+'main.lua';
+  {$else}
+  f:=CheatEngineDir+'main.lua';
+  {$endif}
+  if not FileExists(f) then
+  begin
+    //A minimal build may only ship the shared definitions.
+    f:=CheatEngineDir+'defines.lua';
     if not FileExists(f) then
-    begin
-      //try the defines only then
-      f:='defines.lua';
-      if not FileExists(f) then
-      begin
-        f:=CheatEngineDir+'defines.lua';
-        if not FileExists(f) then
-          exit;
-      end;
-    end;
+      exit;
   end;
 
   //file exists
@@ -16216,10 +16211,50 @@ begin
   end;
 end;
 
+procedure ConfigureLuaSearchPaths(L: Plua_State);
+var
+  basepath, luapath, luacpath: string;
+begin
+  basepath:=GetCEdir;
+  luapath:=basepath+'?.lua;'+basepath+'?'+PathDelim+'init.lua';
+
+  {$ifdef darwin}
+  luapath:=luapath+';'+extractfiledir(extractfiledir(Application.ExeName))+
+    '/Lua/?.lua;'+extractfiledir(extractfiledir(Application.ExeName))+
+    '/Lua/?/init.lua';
+  luacpath:=basepath+'?.dylib;'+basepath+
+    {$ifdef cpu64}'clibs64'{$else}'clibs32'{$endif}+
+    PathDelim+'?.dylib';
+  {$else}
+  {$ifdef windows}
+  luacpath:=basepath+'?.dll;'+basepath+'?53.dll;'+basepath+'loadall.dll;'+
+    basepath+{$ifdef cpu64}'clibs64'{$else}'clibs32'{$endif}+
+    PathDelim+'?.dll';
+  {$else}
+  luacpath:=basepath+'?.so;'+basepath+
+    {$ifdef cpu64}'clibs64'{$else}'clibs32'{$endif}+
+    PathDelim+'?.so';
+  {$endif}
+  {$endif}
+
+  lua_getglobal(L, 'package');
+  if lua_istable(L, -1) then
+  begin
+    lua_pushstring(L, PChar(luapath));
+    lua_setfield(L, -2, 'path');
+    lua_pushstring(L, PChar(luacpath));
+    lua_setfield(L, -2, 'cpath');
+  end;
+  lua_pop(L, 1);
+end;
+
 procedure InitLimitedLuastate(L: Plua_State);
 begin
   //don't put functioncallback events in here, as limited luastates can be destroyed
+  lua_pushboolean(L, true);
+  lua_setfield(L, LUA_REGISTRYINDEX, 'LUA_NOENV');
   luaL_openlibs(L);
+  ConfigureLuaSearchPaths(L);
 
   lua_register(L, 'print', print);
   lua_register(L, 'sleep', lua_sleep);
@@ -17148,20 +17183,6 @@ begin
     s:=tstringlist.create;
     try
       //ce 6.0 compatibility. 6.0 has these methods in the stringlist instead of the strings class
-      s.add('package.path = package.path .. ";?.lua";');
-      {$ifdef darwin}
-      s.add('package.path = package.path .. [[;'+getcedir+'?.lua]]');
-      s.add('package.path = package.path .. [[;'+extractfiledir(extractfiledir(application.exename))+'/Lua/?.lua]]');
-      {$endif}
-
-
-{$ifdef cpu64}
-      s.add('package.cpath = package.cpath .. [[;'+getcedir+'clibs64'+pathdelim+'?'+{$ifdef windows}'.dll'{$endif}{$ifdef darwin}'.dylib'{$endif}+']]');
-      s.add('package.cpath = package.cpath .. [[;.'+pathdelim+'clibs64'+pathdelim+'?'+{$ifdef windows}'.dll'{$endif}{$ifdef darwin}'.dylib'{$endif}+']]');
-{$else}
-      s.add('package.cpath = package.cpath .. [[;'+getcedir+'clibs32'+pathdelim+'?'+{$ifdef windows}'.dll'{$endif}{$ifdef darwin}'.dylib'{$endif}+']]');
-      s.add('package.cpath = package.cpath .. [[;.'+pathdelim+'clibs32'+pathdelim+'?'+{$ifdef windows}'.dll'{$endif}{$ifdef darwin}'.dylib'{$endif}+']]');
-{$endif}
       s.add('stringlist_getCount=strings_getCount');
       s.add('stringlist_getString=strings_getString');
       s.add('stringlist_add=strings_add');

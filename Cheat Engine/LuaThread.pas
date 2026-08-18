@@ -201,7 +201,6 @@ begin
   //limited thread, it has to create the lua state itself, and also destroy it when done
   newstate:=true;
   l:=luaL_newstate;
-  luaL_openlibs(L);
   luaHandler.InitLimitedLuastate(L);
 
   newstate_script:=script;

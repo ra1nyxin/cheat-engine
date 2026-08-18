@@ -192,18 +192,18 @@ int luaO_str2d (const char *s, lua_Number *res_n, lua_Integer *res_i) {
  */
 #ifdef LUA_TINT
 int try_addint( lua_Integer *r, lua_Integer ib, lua_Integer ic ) {
-  lua_Integer v= ib+ic; /* may overflow */
-  if (ib>0 && ic>0)      { if (v < 0) return 0; /*overflow, use floats*/ }
-  else if (ib<0 && ic<0) { if (v >= 0) return 0; }
-  *r= v;
+  if ((ic > 0 && ib > LUA_INTEGER_MAX - ic) ||
+      (ic < 0 && ib < LUA_INTEGER_MIN - ic))
+    return 0;  /* overflow, use floats */
+  *r= ib+ic;
   return 1;
 }
 
 int try_subint( lua_Integer *r, lua_Integer ib, lua_Integer ic ) {
-  lua_Integer v= ib-ic; /* may overflow */
-  if (ib>=0 && ic<0)     { if (v < 0) return 0; /*overflow, use floats*/ }
-  else if (ib<0 && ic>0) { if (v >= 0) return 0; }
-  *r= v;
+  if ((ic > 0 && ib < LUA_INTEGER_MIN + ic) ||
+      (ic < 0 && ib > LUA_INTEGER_MAX + ic))
+    return 0;  /* overflow, use floats */
+  *r= ib-ic;
   return 1;
 }
 
@@ -229,60 +229,30 @@ int try_mulint( lua_Integer *r, lua_Integer ib, lua_Integer ic ) {
 }
 
 int try_divint( lua_Integer *r, lua_Integer ib, lua_Integer ic ) {
-  /* N/0: leave to float side, to give an error
-  */
-  if (ic==0) return 0;
-
-  /* N/LUA_INTEGER_MIN: always non-integer results, or 0 or +1
-  */
-  if (ic==LUA_INTEGER_MIN) {
-    if (ib==LUA_INTEGER_MIN) { *r=1; return 1; }
-    if (ib==0) { *r=0; return 1; }
-
-  /* LUA_INTEGER_MIN (-2^31|63)/N: calculate using float side (either the division 
-   *    causes non-integer results, or there is no accuracy loss in int->fp->int
-   *    conversions (N=2,4,8,..,256 and N=2^30,2^29,..2^23).
-   */
-  } else if (ib==LUA_INTEGER_MIN) {
-    lua_Number d= luai_numdiv( cast_num(LUA_INTEGER_MIN), cast_num(ic) );
-    lua_Integer i; lua_number2integer(i,d);
-    if (cast_num(i)==d) { *r= i; return 1; }
-  
-  } else {
-    /* Note: We _can_ use ANSI C mod here, even on negative values, since
-     *       we only test for == 0 (the sign would be implementation dependent).
-     */
-     if (ib%ic == 0) { *r= ib/ic; return 1; }
+  if (ic==0 || (ib==LUA_INTEGER_MIN && ic==-1))
+    return 0;
+  if (ib%ic == 0) {
+    *r= ib/ic;
+    return 1;
   }
-
   return 0;
 }
 
 int try_modint( lua_Integer *r, lua_Integer ib, lua_Integer ic ) {
-  if (ic!=0) {
-    /* ANSI C can be trusted when b%c==0, or when values are non-negative. 
-     * b - (floor(b/c) * c)
-     *   -->
-     * + +: b - (b/c) * c (b % c can be used)
-     * - -: b - (b/c) * c (b % c could work, but not defined by ANSI C)
-     * 0 -: b - (b/c) * c (=0, b % c could work, but not defined by ANSI C)
-     * - +: b - (b/c-1) * c (when b!=-c)
-     * + -: b - (b/c-1) * c (when b!=-c)
-     *
-     * o MIN%MIN ends up 0, via overflow in calcs but that does not matter.
-     * o MIN%MAX ends up MAX-1 (and other such numbers), also after overflow,
-     *   but that does not matter, results do.
-     */
-    lua_Integer v= ib % ic;
-    if ( v!=0 && (ib<0 || ic<0) ) {
-      v= ib - ((ib/ic) - ((ib<=0 && ic<0) ? 0:1)) * ic;
-    }      
-    /* Result should always have same sign as 2nd argument. (PIL2) */
-    lua_assert( (v<0) ? (ic<0) : (v>0) ? (ic>0) : 1 );
-    *r= v;
+  lua_Integer v;
+  if (ic==0)
+    return 0;  /* let float side return NaN */
+  if (ib==LUA_INTEGER_MIN && ic==-1) {
+    *r= 0;
     return 1;
   }
-  return 0;  /* let float side return NaN */
+  v= ib % ic;
+  if (v!=0 && ((v<0) != (ic<0)))
+    v+=ic;
+  /* Result should always have same sign as 2nd argument. (PIL2) */
+  lua_assert( (v<0) ? (ic<0) : (v>0) ? (ic>0) : 1 );
+  *r= v;
+  return 1;
 }
 
 int try_powint( lua_Integer *r, lua_Integer ib, lua_Integer ic ) {
@@ -299,7 +269,7 @@ int try_powint( lua_Integer *r, lua_Integer ib, lua_Integer ic ) {
   else if (ic<0) return 0;  /* FP realm */
   else if (ib==2 && ic < (int)sizeof(lua_Integer)*8-1) *r= ((lua_Integer)1)<<ic;   /* 1,2,4,...2^30 | 2^62 optimization */
   else if (ic==0) *r=1;
-  else if (luai_abs(ib)==1) *r= (ic%2) ? ib:1;
+  else if (ib==1 || ib==-1) *r= (ic%2) ? ib:1;
   else {
     lua_Integer x= ib;
     while( --ic ) {
@@ -318,4 +288,3 @@ int try_unmint( lua_Integer *r, lua_Integer ib ) {
   return 0;
 }
 #endif
-
