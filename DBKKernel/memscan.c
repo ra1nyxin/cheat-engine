@@ -264,11 +264,35 @@ UINT_PTR getPEThread(UINT_PTR threadid)
 	return result;
 }
 
+static void RestoreMemoryAccessState(BOOL *interruptsDisabled, BOOL *disabledWP, BOOL *dbvmPageFaultsDisabled)
+{
+	if (*disabledWP)
+	{
+		setCR0(getCR0() | (1 << 16));
+		*disabledWP = FALSE;
+	}
+
+	if (*dbvmPageFaultsDisabled)
+	{
+		vmx_enable_dataPageFaults();
+		*dbvmPageFaultsDisabled = FALSE;
+	}
+
+	if (*interruptsDisabled)
+	{
+		enableInterrupts();
+		*interruptsDisabled = FALSE;
+	}
+}
+
 BOOLEAN WriteProcessMemory(DWORD PID,PEPROCESS PEProcess,PVOID Address,DWORD Size, PVOID Buffer)
 {
 	PEPROCESS selectedprocess=PEProcess;
 	KAPC_STATE apc_state;
 	NTSTATUS ntStatus=STATUS_UNSUCCESSFUL;
+	BOOL interruptsDisabled = FALSE;
+	BOOL disabledWP = FALSE;
+	BOOL dbvmPageFaultsDisabled = FALSE;
 		
 	if (selectedprocess==NULL)
 	{
@@ -297,18 +321,20 @@ BOOLEAN WriteProcessMemory(DWORD PID,PEPROCESS PEProcess,PVOID Address,DWORD Siz
 			if ((IsAddressSafe((UINT_PTR)Address)) && (IsAddressSafe((UINT_PTR)Address+Size-1)))
 			{			
 
-	    		//still here, then I gues it's safe to read. (But I can't be 100% sure though, it's still the users problem if he accesses memory that doesn't exist)
-				BOOL disabledWP = FALSE;
-
+				//still here, then I gues it's safe to read. (But I can't be 100% sure though, it's still the users problem if he accesses memory that doesn't exist)
 				target=Address;
 				source=Buffer;
 
 				if ((loadedbydbvm) || (KernelWritesIgnoreWP))  //add a extra security around it as the PF will not be handled
 				{
 					disableInterrupts();
+					interruptsDisabled = TRUE;
 
 					if (loadedbydbvm)
+					{
 						vmx_disable_dataPageFaults();
+						dbvmPageFaultsDisabled = TRUE;
+					}
 
 					if (KernelWritesIgnoreWP)
 					{
@@ -339,17 +365,15 @@ BOOLEAN WriteProcessMemory(DWORD PID,PEPROCESS PEProcess,PVOID Address,DWORD Siz
 
 					if (disabledWP)
 					{						
-						setCR0(getCR0() | (1 << 16));
 						DbgPrint("Enabled CR0.WP");
 					}
 
-					if (loadedbydbvm)
+					if (dbvmPageFaultsDisabled)
 					{
 						lastError = vmx_getLastSkippedPageFault();
-						vmx_enable_dataPageFaults();
 					}
 
-					enableInterrupts();
+					RestoreMemoryAccessState(&interruptsDisabled, &disabledWP, &dbvmPageFaultsDisabled);
 
 					DbgPrint("lastError=%p\n", lastError);
 					if (lastError)
@@ -362,12 +386,13 @@ BOOLEAN WriteProcessMemory(DWORD PID,PEPROCESS PEProcess,PVOID Address,DWORD Siz
 		}
 		__finally
 		{
+			RestoreMemoryAccessState(&interruptsDisabled, &disabledWP, &dbvmPageFaultsDisabled);
 			KeDetachProcess();
 		}
 	}			
 	__except(1)
 	{
-		//DbgPrint("Error while writing\n");
+		RestoreMemoryAccessState(&interruptsDisabled, &disabledWP, &dbvmPageFaultsDisabled);
 		ntStatus = STATUS_UNSUCCESSFUL;
 	}
 	
@@ -383,6 +408,9 @@ BOOLEAN ReadProcessMemory(DWORD PID,PEPROCESS PEProcess,PVOID Address,DWORD Size
 	PEPROCESS selectedprocess=PEProcess;
 	//KAPC_STATE apc_state;
 	NTSTATUS ntStatus=STATUS_UNSUCCESSFUL;
+	BOOL interruptsDisabled = FALSE;
+	BOOL disabledWP = FALSE;
+	BOOL dbvmPageFaultsDisabled = FALSE;
 
 	if (PEProcess==NULL)
 	{
@@ -416,7 +444,9 @@ BOOLEAN ReadProcessMemory(DWORD PID,PEPROCESS PEProcess,PVOID Address,DWORD Size
 				if (loadedbydbvm) //add a extra security around it
 				{
 					disableInterrupts();
+					interruptsDisabled = TRUE;
 					vmx_disable_dataPageFaults();
+					dbvmPageFaultsDisabled = TRUE;
 				}
 
 			
@@ -436,13 +466,11 @@ BOOLEAN ReadProcessMemory(DWORD PID,PEPROCESS PEProcess,PVOID Address,DWORD Size
 				
 				
 
-				if (loadedbydbvm)
+				if (dbvmPageFaultsDisabled)
 				{
 					UINT_PTR lastError;
 					lastError=vmx_getLastSkippedPageFault();
-					vmx_enable_dataPageFaults();
-
-					enableInterrupts();
+					RestoreMemoryAccessState(&interruptsDisabled, &disabledWP, &dbvmPageFaultsDisabled);
 
 					DbgPrint("lastError=%p\n", lastError);
 					if (lastError)
@@ -455,14 +483,13 @@ BOOLEAN ReadProcessMemory(DWORD PID,PEPROCESS PEProcess,PVOID Address,DWORD Size
 		}
 		__finally
 		{
-
+			RestoreMemoryAccessState(&interruptsDisabled, &disabledWP, &dbvmPageFaultsDisabled);
 			KeDetachProcess();
 		}
 	}			
 	__except(1)
 	{
-		//DbgPrint("Error while reading: ReadProcessMemory(%x,%p, %p, %d, %p\n", PID, PEProcess, Address, Size, Buffer);
-
+		RestoreMemoryAccessState(&interruptsDisabled, &disabledWP, &dbvmPageFaultsDisabled);
 		ntStatus = STATUS_UNSUCCESSFUL;
 	}
 	
