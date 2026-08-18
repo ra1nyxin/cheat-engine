@@ -1304,27 +1304,33 @@ UINT_PTR FindFirstDifferentAddress(QWORD address, DWORD *protection)
 }
 
 
-BOOLEAN GetMemoryRegionData(DWORD PID,PEPROCESS PEProcess, PVOID mempointer,ULONG *regiontype, UINT_PTR *memorysize,UINT_PTR *baseaddress)
+NTSTATUS GetMemoryRegionData(DWORD PID,PEPROCESS PEProcess, PVOID mempointer,ULONG *regiontype, UINT_PTR *memorysize,UINT_PTR *baseaddress)
 {
 	UINT_PTR CurrentAddress;
 	KAPC_STATE apc_state;
 	PEPROCESS selectedprocess=PEProcess;
+	NTSTATUS status = STATUS_UNSUCCESSFUL;
+	BOOL attached = FALSE;
 
-	if (getPageTableBase() == 0)
-	{
-		DbgPrint("GetMemoryRegionData failed because pagebase == 0");
-		return FALSE;
-	}
-
-	if (PEProcess==NULL)
-	{
-        if (!NT_SUCCESS(PsLookupProcessByProcessId((PVOID)(UINT_PTR)PID,&selectedprocess)))
-		   return FALSE; //couldn't get the PID
-	}
+	if ((regiontype == NULL) || (memorysize == NULL) || (baseaddress == NULL))
+		return STATUS_INVALID_PARAMETER;
 
 	*baseaddress=(UINT_PTR)mempointer & (UINT_PTR)(~0xfff);
 	*memorysize=0;
 	*regiontype=0;
+
+	if (getPageTableBase() == 0)
+	{
+		DbgPrint("GetMemoryRegionData failed because pagebase == 0");
+		return STATUS_UNSUCCESSFUL;
+	}
+
+	if (PEProcess==NULL)
+	{
+		if (!NT_SUCCESS(PsLookupProcessByProcessId((PVOID)(UINT_PTR)PID,&selectedprocess)))
+			return STATUS_INVALID_CID; //couldn't get the PID
+	}
+
 	//switch context to the target process
 
 	RtlZeroMemory(&apc_state,sizeof(apc_state));
@@ -1332,23 +1338,31 @@ BOOLEAN GetMemoryRegionData(DWORD PID,PEPROCESS PEProcess, PVOID mempointer,ULON
 	__try
 	{
 		KeAttachProcess((PEPROCESS)selectedprocess);
+		attached = TRUE;
 		__try
 		{
 			CurrentAddress=FindFirstDifferentAddress(*baseaddress, regiontype);
-			*memorysize = CurrentAddress-*baseaddress;			
+			*memorysize = CurrentAddress-*baseaddress;
+			status = STATUS_SUCCESS;
 		}
 		__finally
 		{
-			KeDetachProcess();
-			if (PEProcess==NULL) //no valid peprocess was given so I made a reference, so lets also dereference
-				ObDereferenceObject(selectedprocess);
+			if (attached)
+			{
+				KeDetachProcess();
+				attached = FALSE;
+			}
 		}
 	}
 	__except(1)
 	{
 		DbgPrint("Exception in GetMemoryRegionData\n");
 		DbgPrint("mempointer=%p",mempointer);
+		status = STATUS_UNSUCCESSFUL;
 	}
 
-	return 0; 
+	if ((PEProcess==NULL) && selectedprocess)
+		ObDereferenceObject(selectedprocess);
+
+	return status;
 }

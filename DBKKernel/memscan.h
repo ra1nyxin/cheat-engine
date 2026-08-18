@@ -70,7 +70,7 @@ NTSTATUS ReadPhysicalMemory(char *startaddress, UINT_PTR bytestoread, void *outp
 BOOLEAN ReadProcessMemory(DWORD PID,PEPROCESS PEProcess,PVOID Address,DWORD Size, PVOID Buffer);
 BOOLEAN WriteProcessMemory(DWORD PID,PEPROCESS PEProcess,PVOID Address,DWORD Size, PVOID Buffer);
 BOOLEAN IsAddressSafe(UINT_PTR StartAddress);
-BOOLEAN GetMemoryRegionData(DWORD PID,PEPROCESS PEProcess, PVOID mempointer,ULONG *regiontype, UINT_PTR *memorysize,UINT_PTR *baseaddress);
+NTSTATUS GetMemoryRegionData(DWORD PID,PEPROCESS PEProcess, PVOID mempointer,ULONG *regiontype, UINT_PTR *memorysize,UINT_PTR *baseaddress);
 NTSTATUS markAllPagesAsNeverAccessed(PEPROCESS PEProcess);
 int enumAllAccessedPages(PEPROCESS PEProcess);
 int getAccessedPageList(PPRANGE List, int ListSizeInBytes);
