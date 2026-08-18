@@ -127,7 +127,7 @@ void suspendThread(PVOID StartContext)
 			KeWaitForSingleObject(&SuspendMutex, Executive, KernelMode, FALSE, NULL);
 			if (!isSuspended)
 			{
-				if (CurrentTarget == 0)
+				if (CurrentTarget != NULL)
 				{
 					if (PsSuspendProcess(CurrentTarget) == 0)
 						isSuspended = TRUE;
@@ -640,7 +640,7 @@ void bufferWriterThread(PVOID StartContext)
 
 		if ((wr == STATUS_SUCCESS) || (wr == STATUS_TIMEOUT))
 		{
-			if ((wr == STATUS_SUCCESS) && (!isSuspended))
+			if ((wr == STATUS_SUCCESS) && (!isSuspended) && (CurrentTarget != NULL))
 			{
 				//woken up by a dpc				
 				DbgPrint("FlushData event set and not suspended. Suspending target process\n");
