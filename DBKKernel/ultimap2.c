@@ -1008,6 +1008,40 @@ VOID NTAPI ToPADealloc(__in struct _RTL_GENERIC_TABLE *Table, __in __drv_freesMe
 	ExFreePool(Buffer);
 }
 
+static void freeToPA(PToPA_ENTRY *Header, PVOID *OutputBuffer, PMDL *BufferMDL, PRTL_GENERIC_TABLE *gt)
+{
+	PToPA_LOOKUP li;
+
+	if (*BufferMDL)
+	{
+		IoFreeMdl(*BufferMDL);
+		*BufferMDL = NULL;
+	}
+
+	if (*OutputBuffer)
+	{
+		if (singleToPASystem)
+			MmFreeContiguousMemory(*OutputBuffer);
+		else
+			ExFreePool(*OutputBuffer);
+		*OutputBuffer = NULL;
+	}
+
+	if (*Header)
+	{
+		ExFreePool(*Header);
+		*Header = NULL;
+	}
+
+	if (*gt)
+	{
+		while (li = RtlGetElementGenericTable(*gt, 0))
+			RtlDeleteElementGenericTable(*gt, li);
+		ExFreePool(*gt);
+		*gt = NULL;
+	}
+}
+
 void* setupToPA(PToPA_ENTRY *Header, PVOID *OutputBuffer, PMDL *BufferMDL, PRTL_GENERIC_TABLE *gt, ULONG _BufferSize, int NoPMI)
 {
 	ToPA_LOOKUP tl;
@@ -1020,6 +1054,11 @@ void* setupToPA(PToPA_ENTRY *Header, PVOID *OutputBuffer, PMDL *BufferMDL, PRTL_
 
 	PRTL_GENERIC_TABLE x;
 	int i;
+
+	*Header = NULL;
+	*OutputBuffer = NULL;
+	*BufferMDL = NULL;
+	*gt = NULL;
 
 	if (singleToPASystem)
 	{
@@ -1141,8 +1180,6 @@ void* setupToPA(PToPA_ENTRY *Header, PVOID *OutputBuffer, PMDL *BufferMDL, PRTL_
 		*OutputBuffer=MmAllocateContiguousMemorySpecifyCache(newsize, la, ha, boundary, MmCached);
 		//*OutputBuffer=MmAllocateContiguousMemory(newsize, ha);
 
-		DbgPrint("Allocated OutputBuffer at %p", MmGetPhysicalAddress(*OutputBuffer).QuadPart);
-
 		_BufferSize = newsize;
 
 		if (*OutputBuffer == NULL)
@@ -1150,6 +1187,8 @@ void* setupToPA(PToPA_ENTRY *Header, PVOID *OutputBuffer, PMDL *BufferMDL, PRTL_
 			DbgPrint("setupToPA (Single ToPA System): Failure allocating output buffer");
 			return NULL;
 		}
+
+		DbgPrint("Allocated OutputBuffer at %p", MmGetPhysicalAddress(*OutputBuffer).QuadPart);
 
 		r = ExAllocatePool(NonPagedPool, 4096);
 		if (r == NULL)
@@ -1210,12 +1249,21 @@ void* setupToPA(PToPA_ENTRY *Header, PVOID *OutputBuffer, PMDL *BufferMDL, PRTL_
 
 	tl.index = 0;
 	tl.PhysicalAddress = MmGetPhysicalAddress(&r[0]).QuadPart;
-	RtlInsertElementGenericTable(x, &tl, sizeof(tl), NULL);
+	if (RtlInsertElementGenericTable(x, &tl, sizeof(tl), NULL) == NULL)
+	{
+		freeToPA(Header, OutputBuffer, BufferMDL, gt);
+		return NULL;
+	}
 
 	Output = (UINT_PTR)*OutputBuffer;
 	Stop = Output+_BufferSize;
 	
 	*BufferMDL = IoAllocateMdl(*OutputBuffer, _BufferSize, FALSE, FALSE, NULL);
+	if (*BufferMDL == NULL)
+	{
+		freeToPA(Header, OutputBuffer, BufferMDL, gt);
+		return NULL;
+	}
 	MmBuildMdlForNonPagedPool(*BufferMDL);
 
 	if (singleToPASystem)
@@ -1246,7 +1294,11 @@ void* setupToPA(PToPA_ENTRY *Header, PVOID *OutputBuffer, PMDL *BufferMDL, PRTL_
 
 				tl.index = tl.index++;
 				tl.PhysicalAddress = MmGetPhysicalAddress(&r[ToPAIndex + 1]).QuadPart;
-				RtlInsertElementGenericTable(x, &tl, sizeof(tl), NULL);
+				if (RtlInsertElementGenericTable(x, &tl, sizeof(tl), NULL) == NULL)
+				{
+					freeToPA(Header, OutputBuffer, BufferMDL, gt);
+					return NULL;
+				}
 			}
 			else
 			{
@@ -1323,7 +1375,7 @@ NTSTATUS ultimap2_resume()
 
 void *clear = NULL;
 BOOL RegisteredProfilerInterruptHandler;
-void SetupUltimap2(UINT32 PID, UINT32 BufferSize, WCHAR *Path, int rangeCount, PURANGE Ranges, int NoPMI, int UserMode, int KernelMode)
+NTSTATUS SetupUltimap2(UINT32 PID, UINT32 BufferSize, WCHAR *Path, int rangeCount, PURANGE Ranges, int NoPMI, int UserMode, int KernelMode)
 {
 	//for each cpu setup tracing
 	//add the PMI interupt
@@ -1331,12 +1383,19 @@ void SetupUltimap2(UINT32 PID, UINT32 BufferSize, WCHAR *Path, int rangeCount, P
 	NTSTATUS r= STATUS_UNSUCCESSFUL;
 	int cpuid_r[4];
 
+	if ((Path == NULL) || (BufferSize == 0) || (rangeCount < 0) || (rangeCount > 8) || ((rangeCount > 0) && (Ranges == NULL)))
+		return STATUS_INVALID_PARAMETER;
+
+	if (ultimapEnabled || UltimapActive || (PInfo != NULL))
+		return STATUS_DEVICE_BUSY;
+
 	if (Path)
 		DbgPrint("SetupUltimap2(%x, %x, %S, %d, %p,%d,%d,%d\n", PID, BufferSize, Path, rangeCount, Ranges, NoPMI, UserMode, KernelMode);
 	else
 		DbgPrint("SetupUltimap2(%x, %x, %d, %p,%d,%d,%d\n", PID, BufferSize, rangeCount, Ranges, NoPMI, UserMode, KernelMode);
 
 
+	singleToPASystem = FALSE;
 	__cpuidex(cpuid_r, 0x14, 0);
 
 	if ((cpuid_r[2] & 2) == 0)
@@ -1375,6 +1434,8 @@ void SetupUltimap2(UINT32 PID, UINT32 BufferSize, WCHAR *Path, int rangeCount, P
 		}
 
 		Ultimap2Ranges = ExAllocatePool(NonPagedPool, rangeCount*sizeof(URANGE));
+		if (Ultimap2Ranges == NULL)
+			return STATUS_INSUFFICIENT_RESOURCES;
 
 		for (i = 0; i < rangeCount; i++)
 			Ultimap2Ranges[i] = Ranges[i];
@@ -1418,14 +1479,16 @@ void SetupUltimap2(UINT32 PID, UINT32 BufferSize, WCHAR *Path, int rangeCount, P
 				__except (1)
 				{
 					DbgPrint("Failure getting CR3 for this process");
-					return;
+					r = STATUS_UNSUCCESSFUL;
+					goto setupFailed;
 				}
 			}
 		}
 		else
 		{
 			DbgPrint("Failure getting the EProcess for pid %d", PID);
-			return;
+			r = STATUS_INVALID_CID;
+			goto setupFailed;
 		}
 	}
 	else
@@ -1443,7 +1506,8 @@ void SetupUltimap2(UINT32 PID, UINT32 BufferSize, WCHAR *Path, int rangeCount, P
 	if ((PsSuspendProcess == NULL) || (PsResumeProcess == NULL))
 	{
 		DbgPrint("No Suspend/Resume support");
-		return;
+		r = STATUS_NOT_SUPPORTED;
+		goto setupFailed;
 	}
 		
 
@@ -1462,25 +1526,42 @@ void SetupUltimap2(UINT32 PID, UINT32 BufferSize, WCHAR *Path, int rangeCount, P
 	if (PInfo == NULL)
 	{
 		DbgPrint("PInfo alloc failed");
-		return;
+		r = STATUS_INSUFFICIENT_RESOURCES;
+		goto setupFailed;
 	}
+	RtlZeroMemory((PVOID)PInfo, Ultimap2CpuCount*sizeof(PProcessorInfo));
 
 	if (Ultimap2_DataReady == NULL)
 	{
 		DbgPrint("Ultimap2_DataReady alloc failed");
-		return;
+		r = STATUS_INSUFFICIENT_RESOURCES;
+		goto setupFailed;
 	}
+	RtlZeroMemory(Ultimap2_DataReady, Ultimap2CpuCount*sizeof(PVOID));
 
 	for (i = 0; i < Ultimap2CpuCount; i++)
 	{
 		PInfo[i] = ExAllocatePool(NonPagedPool, sizeof(ProcessorInfo));
+		if (PInfo[i] == NULL)
+		{
+			r = STATUS_INSUFFICIENT_RESOURCES;
+			goto setupFailed;
+		}
 		RtlZeroMemory(PInfo[i], sizeof(ProcessorInfo));
 		
 		KeInitializeEvent(&PInfo[i]->InitiateSave, SynchronizationEvent, FALSE);
 		KeInitializeEvent(&PInfo[i]->Buffer2ReadyForSwap, NotificationEvent, TRUE);
 
-		setupToPA(&PInfo[i]->ToPAHeader, &PInfo[i]->ToPABuffer, &PInfo[i]->ToPABufferMDL, &PInfo[i]->ToPALookupTable, BufferSize, NoPMI);
-		setupToPA(&PInfo[i]->ToPAHeader2, &PInfo[i]->ToPABuffer2, &PInfo[i]->ToPABuffer2MDL, &PInfo[i]->ToPALookupTable2, BufferSize, NoPMI);
+		if (setupToPA(&PInfo[i]->ToPAHeader, &PInfo[i]->ToPABuffer, &PInfo[i]->ToPABufferMDL, &PInfo[i]->ToPALookupTable, BufferSize, NoPMI) == NULL)
+		{
+			r = STATUS_INSUFFICIENT_RESOURCES;
+			goto setupFailed;
+		}
+		if (setupToPA(&PInfo[i]->ToPAHeader2, &PInfo[i]->ToPABuffer2, &PInfo[i]->ToPABuffer2MDL, &PInfo[i]->ToPALookupTable2, BufferSize, NoPMI) == NULL)
+		{
+			r = STATUS_INSUFFICIENT_RESOURCES;
+			goto setupFailed;
+		}
 
 		DbgPrint("cpu %d:", i);
 		DbgPrint("ToPAHeader=%p ToPABuffer=%p Size=%x", PInfo[i]->ToPAHeader, PInfo[i]->ToPABuffer, BufferSize);
@@ -1501,11 +1582,20 @@ void SetupUltimap2(UINT32 PID, UINT32 BufferSize, WCHAR *Path, int rangeCount, P
 	UltimapActive = TRUE;
 	ultimapEnabled = TRUE;
 
-	PsCreateSystemThread(&SuspendThreadHandle, 0, NULL, 0, NULL, suspendThread, NULL);	
-	PsCreateSystemThread(&Ultimap2Handle, 0, NULL, 0, NULL, bufferWriterThread, NULL);
-
 	for (i = 0; i < Ultimap2CpuCount; i++)
-		PsCreateSystemThread(&PInfo[i]->WriterThreadHandle, 0, NULL, 0, NULL, WriteThreadForSpecificCPU, (PVOID)i); 
+	{
+		r = PsCreateSystemThread(&PInfo[i]->WriterThreadHandle, 0, NULL, 0, NULL, WriteThreadForSpecificCPU, (PVOID)i);
+		if (!NT_SUCCESS(r))
+			goto setupFailed;
+	}
+
+	r = PsCreateSystemThread(&Ultimap2Handle, 0, NULL, 0, NULL, bufferWriterThread, NULL);
+	if (!NT_SUCCESS(r))
+		goto setupFailed;
+
+	r = PsCreateSystemThread(&SuspendThreadHandle, 0, NULL, 0, NULL, suspendThread, NULL);
+	if (!NT_SUCCESS(r))
+		goto setupFailed;
 
 	if ((NoPMI == FALSE) && (RegisteredProfilerInterruptHandler == FALSE))
 	{
@@ -1527,7 +1617,32 @@ void SetupUltimap2(UINT32 PID, UINT32 BufferSize, WCHAR *Path, int rangeCount, P
 
 
 	forEachCpu(ultimap2_setup_dpc, NULL, NULL, NULL, NULL);
-	
+
+	return STATUS_SUCCESS;
+
+setupFailed:
+	if (PInfo || Ultimap2_DataReady)
+	{
+		ultimapEnabled = TRUE;
+		DisableUltimap2();
+		ultimapEnabled = FALSE;
+	}
+
+	if (CurrentTarget)
+	{
+		ObDereferenceObject(CurrentTarget);
+		CurrentTarget = NULL;
+	}
+	CurrentCR3 = 0;
+
+	if (Ultimap2Ranges)
+	{
+		ExFreePool(Ultimap2Ranges);
+		Ultimap2Ranges = NULL;
+		Ultimap2RangeCount = 0;
+	}
+
+	return r;
 }
 
 void UnregisterUltimapPMI()
@@ -1588,8 +1703,11 @@ void DisableUltimap2(void)
 	{
 		for (i = 0; i < Ultimap2CpuCount; i++)
 		{
-			KeSetEvent(&PInfo[i]->DataProcessed, 0, FALSE);
-			KeSetEvent(&PInfo[i]->DataReady, 0, FALSE);
+			if (PInfo[i])
+			{
+				KeSetEvent(&PInfo[i]->DataProcessed, 0, FALSE);
+				KeSetEvent(&PInfo[i]->DataReady, 0, FALSE);
+			}
 		}
 	}
 
@@ -1610,73 +1728,19 @@ void DisableUltimap2(void)
 		{
 			if (PInfo[i])
 			{
-				PToPA_LOOKUP li;
-
-
 				KeSetEvent(&PInfo[i]->Buffer2ReadyForSwap, 0, FALSE);
 				KeSetEvent(&PInfo[i]->InitiateSave, 0, FALSE);
 
-
-				DbgPrint("Waiting for WriterThreadHandle[%d]",i);
-				ZwWaitForSingleObject(PInfo[i]->WriterThreadHandle, FALSE, NULL);
-				ZwClose(PInfo[i]->WriterThreadHandle);
-				PInfo[i]->WriterThreadHandle = NULL;
-
-				if (PInfo[i]->ToPABufferMDL)
+				if (PInfo[i]->WriterThreadHandle)
 				{
-					IoFreeMdl(PInfo[i]->ToPABufferMDL);
-					PInfo[i]->ToPABufferMDL = NULL;
+					DbgPrint("Waiting for WriterThreadHandle[%d]",i);
+					ZwWaitForSingleObject(PInfo[i]->WriterThreadHandle, FALSE, NULL);
+					ZwClose(PInfo[i]->WriterThreadHandle);
+					PInfo[i]->WriterThreadHandle = NULL;
 				}
 
-				if (PInfo[i]->ToPABuffer)
-				{
-					if (singleToPASystem)
-						MmFreeContiguousMemory(PInfo[i]->ToPABuffer);
-					else
-						ExFreePool(PInfo[i]->ToPABuffer);
-					PInfo[i]->ToPABuffer = NULL;
-				}
-
-				if (PInfo[i]->ToPABuffer2MDL)
-				{
-					IoFreeMdl(PInfo[i]->ToPABuffer2MDL);
-					PInfo[i]->ToPABufferMDL = NULL;
-				}
-				
-				if (PInfo[i]->ToPABuffer2)
-				{
-					if (singleToPASystem)
-						MmFreeContiguousMemory(PInfo[i]->ToPABuffer2);
-					else
-						ExFreePool(PInfo[i]->ToPABuffer2);
-
-					PInfo[i]->ToPABuffer2 = NULL;
-				}
-
-				if (PInfo[i]->ToPAHeader)
-				{
-					ExFreePool(PInfo[i]->ToPAHeader);
-					PInfo[i]->ToPAHeader = NULL;
-				}
-
-				if (PInfo[i]->ToPAHeader2)
-				{
-					ExFreePool(PInfo[i]->ToPAHeader2);
-					PInfo[i]->ToPAHeader2 = NULL;
-				}
-
-				while (li = RtlGetElementGenericTable(PInfo[i]->ToPALookupTable, 0))
-					RtlDeleteElementGenericTable(PInfo[i]->ToPALookupTable, li);					
-					
-				ExFreePool(PInfo[i]->ToPALookupTable);
-				PInfo[i]->ToPALookupTable = NULL;
-
-				while (li = RtlGetElementGenericTable(PInfo[i]->ToPALookupTable2, 0))
-					RtlDeleteElementGenericTable(PInfo[i]->ToPALookupTable2, li);
-
-				ExFreePool(PInfo[i]->ToPALookupTable2);
-				PInfo[i]->ToPALookupTable2 = NULL;
-		
+				freeToPA(&PInfo[i]->ToPAHeader, &PInfo[i]->ToPABuffer, &PInfo[i]->ToPABufferMDL, &PInfo[i]->ToPALookupTable);
+				freeToPA(&PInfo[i]->ToPAHeader2, &PInfo[i]->ToPABuffer2, &PInfo[i]->ToPABuffer2MDL, &PInfo[i]->ToPALookupTable2);
 
 				ExFreePool(PInfo[i]);
 				PInfo[i] = NULL;
@@ -1686,11 +1750,15 @@ void DisableUltimap2(void)
 		}
 
 		ExFreePool(PInfo);
-		ExFreePool(Ultimap2_DataReady);
-		
 		PInfo = NULL;
 
 		DbgPrint("Finished terminating ultimap2");
+	}
+
+	if (Ultimap2_DataReady)
+	{
+		ExFreePool(Ultimap2_DataReady);
+		Ultimap2_DataReady = NULL;
 	}
 
 	if (Ultimap2Ranges)

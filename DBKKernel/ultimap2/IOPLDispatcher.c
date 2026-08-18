@@ -38,12 +38,10 @@ NTSTATUS DispatchIoctl(IN PDEVICE_OBJECT DeviceObject, IN PIRP Irp)
 				int i;
 
 				DbgPrint("IOCTL_CE_ULTIMAP2 V2");
-				for (i = 0; i < (int)(inp->RangeCount); i++)
+				for (i = 0; (i < (int)(inp->RangeCount)) && (i < 8); i++)
 					DbgPrint("%d=%p -> %p", i, (PVOID)inp->Ranges[i].StartAddress, (PVOID)inp->Ranges[i].EndAddress);
 
-				SetupUltimap2(inp->PID, inp->Size, inp->OutputPath, inp->RangeCount, inp->Ranges, inp->NoPMI, inp->UserMode, inp->KernelMode);
-
-				ntStatus = STATUS_SUCCESS;
+				ntStatus = SetupUltimap2(inp->PID, inp->Size, inp->OutputPath, inp->RangeCount, inp->Ranges, inp->NoPMI, inp->UserMode, inp->KernelMode);
 				break;
 			}
 
