@@ -319,7 +319,9 @@ int perfmon_interrupt_centry(void)
 			//Instead of sending the data to a usermode app it was chosen to store the data to a file for later usage
 			DbgPrint("Writing buffer to disk\n");			
 			r=ZwWriteFile(FileHandle, NULL, NULL, NULL, &iosb,  temp, (ULONG)blocksize, NULL, NULL); 
-			DbgPrint("Done Writing. Result=%x\n", r);			
+			DbgPrint("Done Writing. Result=%x\n", r);
+			ExFreePool(temp);
+			temp = NULL;
 		}
 		else
 		{
