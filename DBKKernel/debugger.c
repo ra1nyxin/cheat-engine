@@ -206,12 +206,24 @@ void debugger_initialize(void)
 
 	StackCount = getCpuCount() * 4;
 	Stacks = (PSavedStack*)ExAllocatePool(NonPagedPool, StackCount*sizeof(PSavedStack));
+	if (Stacks == NULL)
+	{
+		StackCount = 0;
+		return;
+	}
+	RtlZeroMemory(Stacks, StackCount*sizeof(PSavedStack));
 
 
 	int i;
 	for (i = 0; i < StackCount; i++)
 	{
 		Stacks[i] = (PSavedStack)ExAllocatePool(NonPagedPool, sizeof(SavedStack));
+		if (Stacks[i] == NULL)
+		{
+			debugger_shutdown();
+			StackCount = 0;
+			return;
+		}
 		RtlZeroMemory(Stacks[i], sizeof(SavedStack));
 	}
 }
@@ -262,6 +274,9 @@ void debugger_growstack()
 					RtlZeroMemory(newStacks[i], sizeof(SavedStack));				
 				else
 				{
+					int j;
+					for (j = StackCount; j < i; j++)
+						ExFreePool(newStacks[j]);
 					ExFreePool(newStacks);
 					csLeave(&StacksCS);
 					KeLowerIrql(oldIRQL);

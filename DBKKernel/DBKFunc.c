@@ -92,24 +92,30 @@ calls a specific function for each cpu that runs in passive mode
 #endif
 }
 
-void forOneCpu(CCHAR cpunr, PKDEFERRED_ROUTINE dpcfunction, PVOID DeferredContext, PVOID  SystemArgument1, PVOID  SystemArgument2, OPTIONAL PPREDPC_CALLBACK preDPCCallback)
+BOOLEAN forOneCpu(CCHAR cpunr, PKDEFERRED_ROUTINE dpcfunction, PVOID DeferredContext, PVOID  SystemArgument1, PVOID  SystemArgument2, OPTIONAL PPREDPC_CALLBACK preDPCCallback)
 {
 	PKDPC dpc;
 
+	dpc = ExAllocatePool(NonPagedPool, sizeof(KDPC));
+	if (dpc == NULL)
+	{
+		DbgPrint("forOneCpu: Failed to allocate DPC\n");
+		return FALSE;
+	}
+
 	if (preDPCCallback) //if preDPCCallback is set call it which may change the system arguments
 		preDPCCallback(cpunr, dpcfunction, DeferredContext, &SystemArgument1, &SystemArgument2);
-	
 
-	dpc = ExAllocatePool(NonPagedPool, sizeof(KDPC));
 	KeInitializeDpc(dpc, dpcfunction, DeferredContext);
 	KeSetTargetProcessorDpc(dpc, cpunr);
 	KeInsertQueueDpc(dpc, SystemArgument1, SystemArgument2);
 	KeFlushQueuedDpcs();
 
 	ExFreePool(dpc);
+	return TRUE;
 }
 
-void forEachCpu(PKDEFERRED_ROUTINE dpcfunction,  PVOID DeferredContext, PVOID  SystemArgument1, PVOID  SystemArgument2, OPTIONAL PPREDPC_CALLBACK preDPCCallback)
+BOOLEAN forEachCpu(PKDEFERRED_ROUTINE dpcfunction,  PVOID DeferredContext, PVOID  SystemArgument1, PVOID  SystemArgument2, OPTIONAL PPREDPC_CALLBACK preDPCCallback)
 /*
 calls a specified dpcfunction for each cpu on the system
 */
@@ -135,6 +141,11 @@ calls a specified dpcfunction for each cpu on the system
 	}
 
 	dpc=ExAllocatePool(NonPagedPool, sizeof(KDPC)*cpucount);
+	if (dpc == NULL)
+	{
+		DbgPrint("forEachCpu: Failed to allocate DPC array\n");
+		return FALSE;
+	}
 
 		
 
@@ -165,10 +176,11 @@ calls a specified dpcfunction for each cpu on the system
 
 
 	ExFreePool(dpc);
+	return TRUE;
 }
 
 
-void forEachCpuAsync(PKDEFERRED_ROUTINE dpcfunction, PVOID DeferredContext, PVOID  SystemArgument1, PVOID  SystemArgument2, OPTIONAL PPREDPC_CALLBACK preDPCCallback)
+BOOLEAN forEachCpuAsync(PKDEFERRED_ROUTINE dpcfunction, PVOID DeferredContext, PVOID  SystemArgument1, PVOID  SystemArgument2, OPTIONAL PPREDPC_CALLBACK preDPCCallback)
 /*
 calls a specified dpcfunction for each cpu on the system
 */
@@ -195,6 +207,11 @@ calls a specified dpcfunction for each cpu on the system
 	}
 
 	dpc = ExAllocatePool(NonPagedPool, sizeof(KDPC)*cpucount);
+	if (dpc == NULL)
+	{
+		DbgPrint("forEachCpuAsync: Failed to allocate DPC array\n");
+		return FALSE;
+	}
 
 	cpus = KeQueryActiveProcessors();
 	cpunr = 0;
@@ -223,6 +240,7 @@ calls a specified dpcfunction for each cpu on the system
 
 
 	ExFreePool(dpc);
+	return TRUE;
 }
 
 

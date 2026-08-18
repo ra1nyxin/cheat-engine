@@ -32,7 +32,8 @@ RTL_GENERIC_COMPARE_RESULTS NTAPI ProcessListCompare(__in struct _RTL_GENERIC_TA
 PVOID NTAPI ProcessListAlloc(__in struct _RTL_GENERIC_TABLE *Table, __in CLONG ByteSize)
 {
 	PVOID r=ExAllocatePool(PagedPool, ByteSize);
-	RtlZeroMemory(r, ByteSize);
+	if (r)
+		RtlZeroMemory(r, ByteSize);
 
 	//DbgPrint("ProcessListAlloc %d",(int)ByteSize);
 	return r;

@@ -493,7 +493,8 @@ void ultimap_disable(void)
 	{
 		int i;
 
-		forEachCpu(ultimap_disable_dpc, NULL, NULL, NULL, NULL);
+		if (!forEachCpu(ultimap_disable_dpc, NULL, NULL, NULL, NULL))
+			return;
 
 		if (SaveToFile && FileHandle) 
 		{		
@@ -704,7 +705,7 @@ NTSTATUS ultimap(UINT64 cr3, UINT64 dbgctl_msr, int _DS_AREA_SIZE, BOOL savetofi
 	} params;
 	int i;
 
-	if (handlerCount>64)
+	if ((handlerCount <= 0) || (handlerCount > 64))
 		return STATUS_UNSUCCESSFUL;
 
 
@@ -742,14 +743,13 @@ NTSTATUS ultimap(UINT64 cr3, UINT64 dbgctl_msr, int _DS_AREA_SIZE, BOOL savetofi
 	DataBlock=ExAllocatePool(NonPagedPool, sizeof(_DataBlock) * MaxDataBlocks);
 	DataReadyPointerList=ExAllocatePool(NonPagedPool, sizeof(PVOID) * MaxDataBlocks);
 
-	RtlZeroMemory(DataBlock, sizeof(_DataBlock) * MaxDataBlocks);
-	RtlZeroMemory(DataReadyPointerList, sizeof(PVOID) * MaxDataBlocks);
-
 
 	if ((DataBlock) && (DataReadyPointerList))
 	{
 		NTSTATUS r;
 		UltimapStopping = FALSE;
+		RtlZeroMemory(DataBlock, sizeof(_DataBlock) * MaxDataBlocks);
+		RtlZeroMemory(DataReadyPointerList, sizeof(PVOID) * MaxDataBlocks);
 
 
 		for (i=0; i< MaxDataBlocks; i++)
@@ -773,12 +773,29 @@ NTSTATUS ultimap(UINT64 cr3, UINT64 dbgctl_msr, int _DS_AREA_SIZE, BOOL savetofi
 
 		DbgPrint("HalSetSystemInformation returned %x\n", r);
 
-		forEachCpu(ultimap_setup_dpc, &params, NULL, NULL, NULL);
+		if (!forEachCpu(ultimap_setup_dpc, &params, NULL, NULL, NULL))
+			return STATUS_INSUFFICIENT_RESOURCES;
 		return STATUS_SUCCESS;
 	}
 	else
 	{
 		DbgPrint("Failure allocating DataBlock and DataReadyPointerList\n");
+		if (DataBlock)
+		{
+			ExFreePool(DataBlock);
+			DataBlock = NULL;
+		}
+		if (DataReadyPointerList)
+		{
+			ExFreePool(DataReadyPointerList);
+			DataReadyPointerList = NULL;
+		}
+		if (FileHandle)
+		{
+			ZwClose(FileHandle);
+			FileHandle = NULL;
+		}
+		UltimapStopping = TRUE;
 		return STATUS_MEMORY_NOT_ALLOCATED;
 	}
 

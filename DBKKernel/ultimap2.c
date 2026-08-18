@@ -196,6 +196,8 @@ NTSTATUS ultimap2_waitForData(ULONG timeout, PULTIMAP2DATAEVENT data)
 		int cpunr;
 
 		waitblock = ExAllocatePool(NonPagedPool, Ultimap2CpuCount*sizeof(KWAIT_BLOCK));
+		if (waitblock == NULL)
+			return STATUS_INSUFFICIENT_RESOURCES;
 		wait.QuadPart = -10000LL * timeout;
 
 		if (timeout == 0xffffffff) //infinite wait
@@ -1356,7 +1358,8 @@ NTSTATUS ultimap2_pause()
 {
 	if (ultimapEnabled)
 	{
-		forEachCpu(ultimap2_disable_dpc, (PVOID)1, NULL, NULL, NULL);
+		if (!forEachCpu(ultimap2_disable_dpc, (PVOID)1, NULL, NULL, NULL))
+			return STATUS_INSUFFICIENT_RESOURCES;
 		if (UltimapActive)
 		{
 			flushallbuffers = TRUE;
@@ -1372,7 +1375,10 @@ NTSTATUS ultimap2_pause()
 NTSTATUS ultimap2_resume()
 {
 	if ((ultimapEnabled) && (PInfo))
-		forEachCpu(ultimap2_setup_dpc, NULL, NULL, NULL, NULL);
+	{
+		if (!forEachCpu(ultimap2_setup_dpc, NULL, NULL, NULL, NULL))
+			return STATUS_INSUFFICIENT_RESOURCES;
+	}
 
 	return STATUS_SUCCESS;
 }
@@ -1622,7 +1628,11 @@ NTSTATUS SetupUltimap2(UINT32 PID, UINT32 BufferSize, WCHAR *Path, int rangeCoun
 
 
 
-	forEachCpu(ultimap2_setup_dpc, NULL, NULL, NULL, NULL);
+	if (!forEachCpu(ultimap2_setup_dpc, NULL, NULL, NULL, NULL))
+	{
+		r = STATUS_INSUFFICIENT_RESOURCES;
+		goto setupFailed;
+	}
 
 	return STATUS_SUCCESS;
 
@@ -1631,7 +1641,8 @@ setupFailed:
 	{
 		ultimapEnabled = TRUE;
 		DisableUltimap2();
-		ultimapEnabled = FALSE;
+		if (ultimapEnabled)
+			return STATUS_INSUFFICIENT_RESOURCES;
 	}
 
 	if (CurrentTarget)
@@ -1700,7 +1711,11 @@ void DisableUltimap2(void)
 
 	DbgPrint("-------------------->DisableUltimap2:Stage 1<------------------");
 	
-	forEachCpuAsync(ultimap2_disable_dpc, NULL, NULL, NULL, NULL);
+	if (!forEachCpuAsync(ultimap2_disable_dpc, NULL, NULL, NULL, NULL))
+	{
+		ultimapEnabled = TRUE;
+		return;
+	}
 
 	
 	UltimapActive = FALSE;

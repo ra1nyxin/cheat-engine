@@ -224,6 +224,26 @@ NTSTATUS DriverEntry(IN PDRIVER_OBJECT DriverObject,
 			BufProcessEventString = ExAllocatePool(PagedPool, sizeof(KEY_VALUE_PARTIAL_INFORMATION) + 100);
 			BufThreadEventString = ExAllocatePool(PagedPool, sizeof(KEY_VALUE_PARTIAL_INFORMATION) + 100);
 
+			if ((BufDriverString == NULL) || (BufDeviceString == NULL) || (BufProcessEventString == NULL) || (BufThreadEventString == NULL))
+			{
+				if (BufDriverString)
+					ExFreePool(BufDriverString);
+				if (BufDeviceString)
+					ExFreePool(BufDeviceString);
+				if (BufProcessEventString)
+					ExFreePool(BufProcessEventString);
+				if (BufThreadEventString)
+					ExFreePool(BufThreadEventString);
+
+				BufDriverString = NULL;
+				BufDeviceString = NULL;
+				BufProcessEventString = NULL;
+				BufThreadEventString = NULL;
+				ZwClose(reg);
+				reg = NULL;
+				return STATUS_INSUFFICIENT_RESOURCES;
+			}
+
 			bufA = BufDriverString;
 			bufB = BufDeviceString;
 			bufC = BufProcessEventString;
