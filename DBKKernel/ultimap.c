@@ -45,6 +45,9 @@ typedef struct
 
 _DataBlock *DataBlock;
 PVOID *DataReadyPointerList;
+volatile LONG UltimapWaiterCount;
+KEVENT UltimapWaitersDrained;
+BOOL UltimapStopping = TRUE;
 
 int perfmon_interrupt_centry(void);
 
@@ -138,45 +141,59 @@ NTSTATUS ultimap_waitForData(ULONG timeout, PULTIMAPDATAEVENT data)
 Called from usermode to wait for data
 */
 {
-	NTSTATUS r;
+	NTSTATUS r = STATUS_UNSUCCESSFUL;
 	LARGE_INTEGER wait;
+	PKWAIT_BLOCK waitblock = NULL;
+	BOOL waiterRegistered = FALSE;
 
-	PKWAIT_BLOCK waitblock;
+	if ((DataBlock == NULL) || UltimapStopping)
+		return STATUS_UNSUCCESSFUL;
 
-	if (DataBlock)
-	{		
+	ExAcquireFastMutex(&DataBlockMutex);
+	if ((DataBlock != NULL) && (!UltimapStopping))
+	{
+		if (InterlockedIncrement(&UltimapWaiterCount) == 1)
+			KeClearEvent(&UltimapWaitersDrained);
+		waiterRegistered = TRUE;
+	}
+	ExReleaseFastMutex(&DataBlockMutex);
+
+	if (!waiterRegistered)
+		return STATUS_UNSUCCESSFUL;
+
+	__try
+	{
 		waitblock=ExAllocatePool(NonPagedPool, MaxDataBlocks*sizeof(KWAIT_BLOCK));
-
+		if (waitblock == NULL)
+			__leave;
 
 		wait.QuadPart=-10000LL * timeout;
-
-		//Wait for the events in the list
-		//If an event is triggered find out which one is triggered, then map that block into the usermode space and return the address and block
-		//That block will be needed to continue
 
 		if (timeout==0xffffffff) //infinite wait
 			r=KeWaitForMultipleObjects(MaxDataBlocks, DataReadyPointerList, WaitAny, UserRequest, UserMode, TRUE, NULL, waitblock);
 		else
 			r=KeWaitForMultipleObjects(MaxDataBlocks, DataReadyPointerList, WaitAny, UserRequest, UserMode, TRUE, &wait, waitblock);
 
-		ExFreePool(waitblock);	
+		ExFreePool(waitblock);
+		waitblock = NULL;
 
 		data->Block=r-STATUS_WAIT_0;
-
-		if (data->Block <= MaxDataBlocks)
+		if (data->Block >= (UINT64)MaxDataBlocks)
 		{
-			//Map this block to usermode
-			
+			r = STATUS_UNSUCCESSFUL;
+			__leave;
+		}
 
-			ExAcquireFastMutex(&DataBlockMutex);
-			if (DataBlock)
+		ExAcquireFastMutex(&DataBlockMutex);
+		__try
+		{
+			if ((DataBlock != NULL) && (!UltimapStopping))
 			{
 				data->KernelAddress=(UINT64)DataBlock[data->Block].Data;
 				data->Mdl=(UINT64)IoAllocateMdl(DataBlock[data->Block].Data, DataBlock[data->Block].DataSize, FALSE, FALSE, NULL);
 				if (data->Mdl)
 				{
 					MmBuildMdlForNonPagedPool((PMDL)(UINT_PTR)data->Mdl);
-
 					data->Address=(UINT_PTR)MmMapLockedPagesSpecifyCache((PMDL)(UINT_PTR)data->Mdl, UserMode, MmCached, NULL, FALSE, NormalPagePriority);
 					if (data->Address)
 					{
@@ -185,27 +202,29 @@ Called from usermode to wait for data
 						r=STATUS_SUCCESS;
 					}
 					else
-						r=STATUS_UNSUCCESSFUL;					
+						r=STATUS_UNSUCCESSFUL;
 				}
 				else
 					r=STATUS_UNSUCCESSFUL;
 			}
 			else
 				r=STATUS_UNSUCCESSFUL;
-
-			ExReleaseFastMutex(&DataBlockMutex);
-
-			return r;	
 		}
-		else
-			return STATUS_UNSUCCESSFUL;
-		
+		__finally
+		{
+			ExReleaseFastMutex(&DataBlockMutex);
+		}
 	}
-	else
-		return STATUS_UNSUCCESSFUL;
+	__finally
+	{
+		if (waitblock)
+			ExFreePool(waitblock);
 
+		if (InterlockedDecrement(&UltimapWaiterCount) == 0)
+			KeSetEvent(&UltimapWaitersDrained, 0, FALSE);
+	}
 
-	
+	return r;
 }
 
 /*
@@ -490,6 +509,13 @@ void ultimap_disable(void)
 		for (i=0; i<MaxDataBlocks; i++)
 			KeSetEvent(&DataBlock[i].DataReady,0, FALSE);
 
+		UltimapStopping = TRUE;
+		ExReleaseFastMutex(&DataBlockMutex);
+
+		KeWaitForSingleObject(&UltimapWaitersDrained, Executive, KernelMode, FALSE, NULL);
+
+		ExAcquireFastMutex(&DataBlockMutex);
+
 		ExFreePool(DataBlock);
 		DataBlock=NULL;
 
@@ -707,6 +733,8 @@ NTSTATUS ultimap(UINT64 cr3, UINT64 dbgctl_msr, int _DS_AREA_SIZE, BOOL savetofi
 	MaxDataBlocks=handlerCount;
 	KeInitializeSemaphore(&DataBlockSemaphore, MaxDataBlocks, MaxDataBlocks);
 	ExInitializeFastMutex(&DataBlockMutex);
+	KeInitializeEvent(&UltimapWaitersDrained, NotificationEvent, TRUE);
+	UltimapWaiterCount = 0;
 
 	//Datablock inits
 
@@ -720,6 +748,7 @@ NTSTATUS ultimap(UINT64 cr3, UINT64 dbgctl_msr, int _DS_AREA_SIZE, BOOL savetofi
 	if ((DataBlock) && (DataReadyPointerList))
 	{
 		NTSTATUS r;
+		UltimapStopping = FALSE;
 
 
 		for (i=0; i< MaxDataBlocks; i++)
