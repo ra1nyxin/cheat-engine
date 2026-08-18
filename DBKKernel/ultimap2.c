@@ -1300,7 +1300,7 @@ void* setupToPA(PToPA_ENTRY *Header, PVOID *OutputBuffer, PMDL *BufferMDL, PRTL_
 				r[ToPAIndex].Value = MmGetPhysicalAddress(&r[ToPAIndex + 1]).QuadPart;
 				r[ToPAIndex].Bits.END = 1;
 
-				tl.index = tl.index++;
+				tl.index++;
 				tl.PhysicalAddress = MmGetPhysicalAddress(&r[ToPAIndex + 1]).QuadPart;
 				if (RtlInsertElementGenericTable(x, &tl, sizeof(tl), NULL) == NULL)
 				{
