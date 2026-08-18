@@ -767,6 +767,12 @@ void PMI(__in struct _KINTERRUPT *Interrupt, __in PVOID ServiceContext)
 {
 	//check if caused by me, if so defer to dpc
 	DbgPrint("PMI");
+	if ((!UltimapActive) || (PInfo == NULL))
+	{
+		apic_clearPerfmon();
+		return;
+	}
+
 	__try
 	{
 		if ((__readmsr(IA32_PERF_GLOBAL_STATUS) >> 55) & 1)
@@ -1657,17 +1663,25 @@ void UnregisterUltimapPMI()
 		DbgPrint("1: HalSetSystemInformation to disable returned %x\n", r);
 
 		if (r == STATUS_SUCCESS)
+		{
+			RegisteredProfilerInterruptHandler = FALSE;
 			return;
+		}
 
 		r = HalSetSystemInformation(HalProfileSourceInterruptHandler, sizeof(PVOID*), &clear); //unhook the perfmon interrupt
 		DbgPrint("2: HalSetSystemInformation to disable returned %x\n", r);
 
 		if (r == STATUS_SUCCESS)
+		{
+			RegisteredProfilerInterruptHandler = FALSE;
 			return;
+		}
 
 
 		r = HalSetSystemInformation(HalProfileSourceInterruptHandler, sizeof(PVOID*), 0);
 		DbgPrint("3: HalSetSystemInformation to disable returned %x\n", r);
+		if (r == STATUS_SUCCESS)
+			RegisteredProfilerInterruptHandler = FALSE;
 		
 	}
 	else
@@ -1682,6 +1696,7 @@ void DisableUltimap2(void)
 
 	if (!ultimapEnabled)
 		return;
+	ultimapEnabled = FALSE;
 
 	DbgPrint("-------------------->DisableUltimap2:Stage 1<------------------");
 	
@@ -1768,6 +1783,24 @@ void DisableUltimap2(void)
 
 		Ultimap2RangeCount = 0;
 	}
+
+	KeWaitForSingleObject(&SuspendMutex, Executive, KernelMode, FALSE, NULL);
+	if (isSuspended && CurrentTarget)
+		PsResumeProcess(CurrentTarget);
+	isSuspended = FALSE;
+	KeReleaseMutex(&SuspendMutex, FALSE);
+
+	if (CurrentTarget)
+	{
+		ObDereferenceObject(CurrentTarget);
+		CurrentTarget = NULL;
+	}
+
+	CurrentCR3 = 0;
+	flushallbuffers = FALSE;
+	suspendCount = 0;
+	Ultimap2CpuCount = 0;
+	SaveToFile = FALSE;
 
 	DbgPrint("-------------------->DisableUltimap2:Finish<------------------");
 
