@@ -222,21 +222,38 @@ void ultimap_cleanstate()
 
 int perfmon_interrupt_centry(void)
 {
-
+	int currentCpu = cpunr();
 	KIRQL old = PASSIVE_LEVEL;
+	KIRQL entryIrql = KeGetCurrentIrql();
 	int changedIRQL = 0;
 	
 	void *temp;
-	int causedbyme=(DS_AREA[cpunr()]->BTS_IndexBaseAddress>=DS_AREA[cpunr()]->BTS_InterruptThresholdAddress);
+	int causedbyme;
 	UINT_PTR blocksize;
-	
-	DbgPrint("perfmon_interrupt_centry\n", cpunr());
+
+	if (DS_AREA[currentCpu] == NULL)
+	{
+		disableInterrupts();
+		return FALSE;
+	}
+
+	causedbyme = (DS_AREA[currentCpu]->BTS_IndexBaseAddress >= DS_AREA[currentCpu]->BTS_InterruptThresholdAddress);
+
+	DbgPrint("perfmon_interrupt_centry\n");
 
 
 	if (causedbyme)
 		ultimap_cleanstate();	
 
-	blocksize=(UINT_PTR)(DS_AREA[cpunr()]->BTS_IndexBaseAddress-DS_AREA[cpunr()]->BTS_BufferBaseAddress);
+	/* Waiting, fast mutexes and file I/O below require PASSIVE_LEVEL. */
+	if (entryIrql != PASSIVE_LEVEL)
+	{
+		DS_AREA[currentCpu]->BTS_IndexBaseAddress = DS_AREA[currentCpu]->BTS_BufferBaseAddress;
+		disableInterrupts();
+		return causedbyme;
+	}
+
+	blocksize=(UINT_PTR)(DS_AREA[currentCpu]->BTS_IndexBaseAddress-DS_AREA[currentCpu]->BTS_BufferBaseAddress);
 	
 	{	
 		if (KeGetCurrentIrql() < DISPATCH_LEVEL)
@@ -247,19 +264,19 @@ int perfmon_interrupt_centry(void)
 		}
 
 
-		DbgPrint("Entry cpunr=%d\n", cpunr());
+		DbgPrint("Entry cpunr=%d\n", currentCpu);
 		DbgPrint("Entry threadid=%d\n", PsGetCurrentThreadId());
 		
 
 		temp=ExAllocatePool(NonPagedPool, blocksize);
 		if (temp)
 		{
-			RtlCopyMemory(temp, (PVOID *)(UINT_PTR)DS_AREA[cpunr()]->BTS_BufferBaseAddress, blocksize);
+			RtlCopyMemory(temp, (PVOID *)(UINT_PTR)DS_AREA[currentCpu]->BTS_BufferBaseAddress, blocksize);
 
 			DbgPrint("temp=%p\n", temp);
 
 
-			DS_AREA[cpunr()]->BTS_IndexBaseAddress=DS_AREA[cpunr()]->BTS_BufferBaseAddress; //don't reset on alloc error	
+			DS_AREA[currentCpu]->BTS_IndexBaseAddress=DS_AREA[currentCpu]->BTS_BufferBaseAddress; //don't reset on alloc error
 		}
 		else
 		{
@@ -322,7 +339,7 @@ int perfmon_interrupt_centry(void)
 					DbgPrint("Using datablock %d\n", currentblock);
 					DataBlock[currentblock].Data=temp;
 					DataBlock[currentblock].DataSize=(int)blocksize;
-					DataBlock[currentblock].CpuID=cpunr();
+					DataBlock[currentblock].CpuID=currentCpu;
 					
 					DbgPrint("Calling KeSetEvent/KeWaitForSingleObject\n");
 					KeSetEvent(&DataBlock[currentblock].DataReady, 1, FALSE); //Trigger a worker thread to start working					
