@@ -157,7 +157,7 @@ begin
   {$ifdef windows}
   if SystemFunction036(@RandomBytes, SizeOf(RandomBytes)) then
   begin
-    TitleLength := 12 + (RandomBytes[0] mod 9);
+    TitleLength := 6 + (RandomBytes[0] mod 15);
     SetLength(Result, TitleLength);
     for I := 1 to TitleLength do
       Result[I] := TitleCharacters[1 + (RandomBytes[I] mod Length(TitleCharacters))];
@@ -166,7 +166,7 @@ begin
   {$endif}
 
   Randomize;
-  TitleLength := 12 + Random(9);
+  TitleLength := 6 + Random(15);
   SetLength(Result, TitleLength);
   for I := 1 to TitleLength do
     Result[I] := TitleCharacters[1 + Random(Length(TitleCharacters))];
