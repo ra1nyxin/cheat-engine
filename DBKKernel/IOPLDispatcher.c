@@ -1359,8 +1359,9 @@ NTSTATUS DispatchIoctl(IN PDEVICE_OBJECT DeviceObject, IN PIRP Irp)
 				} *outp;
 
 				KAPC_STATE apc_state;
-				PEPROCESS selectedprocess;
+				PEPROCESS selectedprocess = NULL;
 				PMDL FromMDL=NULL;
+				BOOLEAN FromPagesLocked = FALSE;
 
 				inp = Irp->AssociatedIrp.SystemBuffer;
 				outp = Irp->AssociatedIrp.SystemBuffer;
@@ -1384,22 +1385,28 @@ NTSTATUS DispatchIoctl(IN PDEVICE_OBJECT DeviceObject, IN PIRP Irp)
 							{
 								FromMDL=IoAllocateMdl((PVOID)(UINT_PTR)inp->address, inp->size, FALSE, FALSE, NULL);
 								if (FromMDL)
+								{
 									MmProbeAndLockPages(FromMDL, KernelMode, IoReadAccess);
+									FromPagesLocked = TRUE;
+								}
 							}
 							__finally
 							{
 								KeUnstackDetachProcess(&apc_state);
 							}
 
-						}
-						__except (1)
-						{
-							DbgPrint("Exception\n");
-							ntStatus = STATUS_UNSUCCESSFUL;
-							break;
-						}	
+							}
+							__except (1)
+							{
+								DbgPrint("Exception\n");
+								ntStatus = STATUS_UNSUCCESSFUL;
+							}
 
-						ObDereferenceObject(selectedprocess);
+							if (selectedprocess)
+							{
+								ObDereferenceObject(selectedprocess);
+								selectedprocess = NULL;
+							}
 					}
 				}
 				else
@@ -1412,22 +1419,18 @@ NTSTATUS DispatchIoctl(IN PDEVICE_OBJECT DeviceObject, IN PIRP Irp)
 						{
 							DbgPrint("IoAllocateMdl success\n");
 							MmProbeAndLockPages(FromMDL, KernelMode, IoReadAccess);
+							FromPagesLocked = TRUE;
 						}
 					}
 					__except (1)
-					{
-						DbgPrint("Exception\n");
-
-						if (FromMDL)
 						{
-							IoFreeMdl(FromMDL);
-							FromMDL = NULL;
+							DbgPrint("Exception\n");
+							ntStatus = STATUS_UNSUCCESSFUL;
 						}
 					}
-				}
 
-				if (FromMDL)
-				{
+					if (FromMDL && FromPagesLocked)
+					{
 					DbgPrint("FromMDL is valid\n");
 
 					if (inp->ToPID)
@@ -1441,11 +1444,16 @@ NTSTATUS DispatchIoctl(IN PDEVICE_OBJECT DeviceObject, IN PIRP Irp)
 								RtlZeroMemory(&apc_state, sizeof(apc_state));
 								KeStackAttachProcess((PVOID)selectedprocess, &apc_state);
 
-								__try
-								{
+							__try
+							{
 									outp->Address = (UINT64)MmMapLockedPagesSpecifyCache(FromMDL, UserMode, MmWriteCombined, NULL, FALSE, NormalPagePriority);
-									outp->FromMDL = (UINT64)FromMDL;
-									ntStatus = STATUS_SUCCESS;
+									if (outp->Address)
+									{
+										outp->FromMDL = (UINT64)FromMDL;
+										ntStatus = STATUS_SUCCESS;
+									}
+									else
+										ntStatus = STATUS_INSUFFICIENT_RESOURCES;
 								}
 								__finally
 								{
@@ -1457,25 +1465,34 @@ NTSTATUS DispatchIoctl(IN PDEVICE_OBJECT DeviceObject, IN PIRP Irp)
 							{
 								DbgPrint("Exception part 2\n");
 								ntStatus = STATUS_UNSUCCESSFUL;
-								break;
 							}
 
-							ObDereferenceObject(selectedprocess);
+							if (selectedprocess)
+							{
+								ObDereferenceObject(selectedprocess);
+								selectedprocess = NULL;
+							}
 						}
 					}
 					else
-					{
-						DbgPrint("To kernel or self\n", inp->FromPID);
-
-						__try
 						{
-							outp->Address = (UINT64)MmMapLockedPagesSpecifyCache(FromMDL, UserMode, MmWriteCombined, NULL, FALSE, NormalPagePriority);
-							outp->FromMDL = (UINT64)FromMDL;
-							ntStatus = STATUS_SUCCESS;
-						}
+							DbgPrint("To kernel or self\n", inp->FromPID);
+
+							__try
+							{
+								outp->Address = (UINT64)MmMapLockedPagesSpecifyCache(FromMDL, UserMode, MmWriteCombined, NULL, FALSE, NormalPagePriority);
+								if (outp->Address)
+								{
+									outp->FromMDL = (UINT64)FromMDL;
+									ntStatus = STATUS_SUCCESS;
+								}
+								else
+									ntStatus = STATUS_INSUFFICIENT_RESOURCES;
+							}
 						__except (1)
 						{
 							DbgPrint("Exception part 2\n");
+							ntStatus = STATUS_UNSUCCESSFUL;
 						}
 					}
 
@@ -1483,13 +1500,19 @@ NTSTATUS DispatchIoctl(IN PDEVICE_OBJECT DeviceObject, IN PIRP Irp)
 
 					
 
-				}
-				else
-					DbgPrint("FromMDL==NULL\n");
+					}
+					else
+						DbgPrint("FromMDL==NULL\n");
 
+					if (!NT_SUCCESS(ntStatus) && FromMDL)
+					{
+						if (FromPagesLocked)
+							MmUnlockPages(FromMDL);
+						IoFreeMdl(FromMDL);
+						FromMDL = NULL;
+					}
 
-				
-				break;
+					break;
 			}
 
 		case IOCTL_CE_UNMAP_MEMORY:
