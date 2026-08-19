@@ -515,11 +515,14 @@ var
   j: integer;
 begin
   result:=getpointer(i);
+  pointsto:=0;
+  if result=nil then
+    exit;
+
   address:=0;
   address2:=0;
 
   //resolve the pointer
-  pointsto:=0;
   if result.modulenr=-1 then
     address:=result.moduleoffset
   else

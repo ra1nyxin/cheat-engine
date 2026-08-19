@@ -62,6 +62,7 @@ uses pointerscannerfrm;
 
 resourcestring
   rstimeLeft='Estimated time left';
+  rsUnableToReadPointerScanResult='Unable to read a pointer scan result';
 
 procedure TPointerListSortThread.sortdone;
 begin
@@ -124,6 +125,8 @@ begin
         position:=i;
 
         p:=pointerscanresults.getPointer(i);
+        if p=nil then
+          raise exception.create(rsUnableToReadPointerScanResult);
 
         if column=0 then //modules are limited to 32-bit length, so seperate them by the modulenr
         begin
