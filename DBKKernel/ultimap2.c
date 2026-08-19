@@ -35,6 +35,10 @@ int Ultimap2RangeCount;
 PURANGE Ultimap2Ranges = NULL;
 
 PVOID *Ultimap2_DataReady;
+FAST_MUTEX Ultimap2WaiterMutex;
+KEVENT Ultimap2WaitersDrained;
+volatile LONG Ultimap2WaiterCount;
+volatile BOOLEAN Ultimap2Stopping = TRUE;
 
 
 #if (NTDDI_VERSION < NTDDI_VISTA)
@@ -179,25 +183,39 @@ NTSTATUS ultimap2_continue(int cpunr)
 NTSTATUS ultimap2_waitForData(ULONG timeout, PULTIMAP2DATAEVENT data)
 {
 	NTSTATUS r=STATUS_UNSUCCESSFUL;
-
-
-
+	NTSTATUS wr = STATUS_UNSUCCESSFUL;
+	LARGE_INTEGER wait;
+	PKWAIT_BLOCK waitblock = NULL;
+	BOOLEAN waiterRegistered = FALSE;
+	int cpunr;
 
 	//Wait for the events in the list
 	//If an event is triggered find out which one is triggered, then map that block into the usermode space and return the address and block
 	//That block will be needed to continue
 
-	if (UltimapActive)
+	if (!UltimapActive || Ultimap2Stopping)
+		return STATUS_UNSUCCESSFUL;
+
+	ExAcquireFastMutex(&Ultimap2WaiterMutex);
+	if (UltimapActive && !Ultimap2Stopping && PInfo && Ultimap2_DataReady && (Ultimap2CpuCount > 0))
 	{
-		NTSTATUS wr = STATUS_UNSUCCESSFUL;
-		LARGE_INTEGER wait;
-		PKWAIT_BLOCK waitblock;
+		if (InterlockedIncrement(&Ultimap2WaiterCount) == 1)
+			KeClearEvent(&Ultimap2WaitersDrained);
+		waiterRegistered = TRUE;
+	}
+	ExReleaseFastMutex(&Ultimap2WaiterMutex);
 
-		int cpunr;
+	if (!waiterRegistered)
+		return STATUS_UNSUCCESSFUL;
 
+	__try
+	{
 		waitblock = ExAllocatePool(NonPagedPool, Ultimap2CpuCount*sizeof(KWAIT_BLOCK));
 		if (waitblock == NULL)
-			return STATUS_INSUFFICIENT_RESOURCES;
+		{
+			r = STATUS_INSUFFICIENT_RESOURCES;
+			__leave;
+		}
 		wait.QuadPart = -10000LL * timeout;
 
 		if (timeout == 0xffffffff) //infinite wait
@@ -206,13 +224,14 @@ NTSTATUS ultimap2_waitForData(ULONG timeout, PULTIMAP2DATAEVENT data)
 			wr = KeWaitForMultipleObjects(Ultimap2CpuCount, Ultimap2_DataReady, WaitAny, UserRequest, UserMode, TRUE, &wait, waitblock);
 
 		ExFreePool(waitblock);
+		waitblock = NULL;
 
 		DbgPrint("ultimap2_waitForData wait returned %x", wr);
 
 		cpunr = wr - STATUS_WAIT_0;
 
 
-		if ((cpunr < Ultimap2CpuCount) && (cpunr>=0))
+		if (UltimapActive && !Ultimap2Stopping && PInfo && (cpunr < Ultimap2CpuCount) && (cpunr>=0))
 		{
 			PProcessorInfo pi = PInfo[cpunr];
 
@@ -256,6 +275,16 @@ NTSTATUS ultimap2_waitForData(ULONG timeout, PULTIMAP2DATAEVENT data)
 			}
 		}
 
+	}
+	__finally
+	{
+		if (waitblock)
+			ExFreePool(waitblock);
+
+		ExAcquireFastMutex(&Ultimap2WaiterMutex);
+		if (InterlockedDecrement(&Ultimap2WaiterCount) == 0)
+			KeSetEvent(&Ultimap2WaitersDrained, 0, FALSE);
+		ExReleaseFastMutex(&Ultimap2WaiterMutex);
 	}
 
 	DbgPrint("ultimap2_waitForData returned %x\n", r);
@@ -1528,6 +1557,10 @@ NTSTATUS SetupUltimap2(UINT32 PID, UINT32 BufferSize, WCHAR *Path, int rangeCoun
 	KeInitializeEvent(&FlushData, SynchronizationEvent, FALSE);
 	KeInitializeEvent(&SuspendEvent, SynchronizationEvent, FALSE);
 	KeInitializeMutex(&SuspendMutex, 0);
+	ExInitializeFastMutex(&Ultimap2WaiterMutex);
+	KeInitializeEvent(&Ultimap2WaitersDrained, NotificationEvent, TRUE);
+	Ultimap2WaiterCount = 0;
+	Ultimap2Stopping = FALSE;
 
 
 	Ultimap2CpuCount = KeQueryMaximumProcessorCount();
@@ -1637,6 +1670,7 @@ NTSTATUS SetupUltimap2(UINT32 PID, UINT32 BufferSize, WCHAR *Path, int rangeCoun
 	return STATUS_SUCCESS;
 
 setupFailed:
+	Ultimap2Stopping = TRUE;
 	if (PInfo || Ultimap2_DataReady)
 	{
 		ultimapEnabled = TRUE;
@@ -1702,6 +1736,7 @@ void UnregisterUltimapPMI()
 void DisableUltimap2(void)
 {
 	int i;
+	LARGE_INTEGER waiterDrainInterval;
 
 	DbgPrint("-------------------->DisableUltimap2<------------------");
 
@@ -1718,7 +1753,10 @@ void DisableUltimap2(void)
 	}
 
 	
+	ExAcquireFastMutex(&Ultimap2WaiterMutex);
+	Ultimap2Stopping = TRUE;
 	UltimapActive = FALSE;
+	ExReleaseFastMutex(&Ultimap2WaiterMutex);
 	
 	if (SuspendThreadHandle)
 	{
@@ -1729,17 +1767,21 @@ void DisableUltimap2(void)
 		SuspendThreadHandle = NULL;
 	}
 
-	if (PInfo)
+	waiterDrainInterval.QuadPart = -100000LL;
+	do
 	{
-		for (i = 0; i < Ultimap2CpuCount; i++)
+		if (PInfo)
 		{
-			if (PInfo[i])
+			for (i = 0; i < Ultimap2CpuCount; i++)
 			{
-				KeSetEvent(&PInfo[i]->DataProcessed, 0, FALSE);
-				KeSetEvent(&PInfo[i]->DataReady, 0, FALSE);
+				if (PInfo[i])
+				{
+					KeSetEvent(&PInfo[i]->DataProcessed, 0, FALSE);
+					KeSetEvent(&PInfo[i]->DataReady, 0, FALSE);
+				}
 			}
 		}
-	}
+	} while (KeWaitForSingleObject(&Ultimap2WaitersDrained, Executive, KernelMode, FALSE, &waiterDrainInterval) == STATUS_TIMEOUT);
 
 	if (Ultimap2Handle)
 	{
