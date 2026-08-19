@@ -61,6 +61,49 @@ jobs:
           "LAZBUILD=$($lazbuild.FullName)" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
           & $lazbuild.FullName '--version'
 
+      - name: Install the pinned Windows Driver Kit
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $installer = Join-Path $env:RUNNER_TEMP 'wdk-10.0.19041.685-setup.exe'
+          $url = 'https://download.microsoft.com/download/c/f/8/cf80b955-d578-4635-825c-2801911f9d79/wdk/wdksetup.exe'
+          $expectedHash = '5f4ea0c55af099f97cb569a927c3a290c211f17edcfc65009f5b9253b9827925'
+          for ($attempt = 1; $attempt -le 3; $attempt++) {
+            Remove-Item $installer -Force -ErrorAction SilentlyContinue
+            & curl.exe --fail --location --retry 5 --retry-all-errors --connect-timeout 30 --output $installer $url
+            if ($LASTEXITCODE -eq 0 -and (Test-Path $installer)) {
+              $actualHash = (Get-FileHash $installer -Algorithm SHA256).Hash.ToLower()
+              if ($actualHash -eq $expectedHash) { break }
+            }
+            if ($attempt -eq 3) { throw 'Could not download the verified WDK 10.0.19041.685 installer.' }
+            Start-Sleep -Seconds (10 * $attempt)
+          }
+
+          $wdkInstalled = $false
+          for ($attempt = 1; $attempt -le 3; $attempt++) {
+            $process = Start-Process -FilePath $installer -ArgumentList '/features + /q /norestart' -Wait -PassThru
+            if ($process.ExitCode -in 0, 3010) {
+              $wdkInstalled = $true
+              break
+            }
+            if ($attempt -lt 3) { Start-Sleep -Seconds (15 * $attempt) }
+          }
+          if (-not $wdkInstalled) { throw 'Could not install Windows Driver Kit 10.0.19041.685.' }
+
+          $wdkVersion = '10.0.19041.0'
+          $wdkTargets = Join-Path ${env:ProgramFiles(x86)} "Windows Kits\10\build\$wdkVersion\WindowsDriver.Common.targets"
+          if (-not (Test-Path $wdkTargets)) { throw "WDK targets were not found: $wdkTargets" }
+
+          $vswhere = Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio\Installer\vswhere.exe'
+          $vsPath = & $vswhere -latest -products * -requires Microsoft.Component.MSBuild -property installationPath
+          if (-not $vsPath) { throw 'Visual Studio with MSBuild was not found.' }
+          $msbuild = Join-Path $vsPath 'MSBuild\Current\Bin\MSBuild.exe'
+          if (-not (Test-Path $msbuild)) { throw "MSBuild was not found: $msbuild" }
+
+          "MSBUILD=$msbuild" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "WDK_VERSION=$wdkVersion" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          & $msbuild -version
+
       - name: Build static FPC executables
         shell: pwsh
         working-directory: Cheat Engine
@@ -74,6 +117,25 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'The 64-bit release build failed.' }
           & $env:LAZBUILD '--build-mode=Release 64-Bit O4 AVX2' '--build-all' 'cheatengine.lpi'
           if ($LASTEXITCODE -ne 0) { throw 'The AVX2 64-bit release build failed.' }
+
+      - name: Build unsigned DBK drivers
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $common = @(
+            'DBKKernel\DBKKernel.vcxproj',
+            '/t:Rebuild',
+            '/m',
+            '/p:Configuration=Release without sig',
+            "/p:WindowsTargetPlatformVersion=$env:WDK_VERSION",
+            '/p:SignMode=Off',
+            '/p:PostBuildEventUseInBuild=false'
+          )
+
+          & $env:MSBUILD @common '/p:Platform=Win32'
+          if ($LASTEXITCODE -ne 0) { throw 'The unsigned 32-bit DBK driver build failed.' }
+          & $env:MSBUILD @common '/p:Platform=x64'
+          if ($LASTEXITCODE -ne 0) { throw 'The unsigned 64-bit DBK driver build failed.' }
 
       - name: Validate the release payload
         shell: pwsh
@@ -93,7 +155,9 @@ jobs:
             'bin\main.lua',
             'bin\autorun',
             'bin\win32\dbghelp.dll',
-            'bin\win64\dbghelp.dll'
+            'bin\win64\dbghelp.dll',
+            'bin\DBK32.sys',
+            'bin\DBK64.sys'
           )
           $missing = $required | Where-Object { -not (Test-Path $_) }
           if ($missing) { throw "Release payload is incomplete:`n$($missing -join "`n")" }
@@ -101,26 +165,129 @@ jobs:
           $dynamicRuntime = Select-String -Path 'bin\cheatengine-*.exe' -Pattern 'libgcc_s_|libstdc\+\+|libwinpthread' -SimpleMatch:$false
           if ($dynamicRuntime) { throw "Unexpected MinGW runtime dependency found: $($dynamicRuntime.Path -join ', ')" }
 
+          function Get-PeMachine([string] $path) {
+            $stream = [System.IO.File]::OpenRead((Resolve-Path $path))
+            try {
+              $reader = [System.IO.BinaryReader]::new($stream)
+              $stream.Position = 0x3c
+              $peOffset = $reader.ReadUInt32()
+              $stream.Position = $peOffset + 4
+              return $reader.ReadUInt16()
+            } finally {
+              $stream.Dispose()
+            }
+          }
+
+          if ((Get-PeMachine 'bin\DBK32.sys') -ne 0x014c) { throw 'DBK32.sys is not an x86 PE image.' }
+          if ((Get-PeMachine 'bin\DBK64.sys') -ne 0x8664) { throw 'DBK64.sys is not an x64 PE image.' }
+          foreach ($driver in 'bin\DBK32.sys', 'bin\DBK64.sys') {
+            $signature = Get-AuthenticodeSignature $driver
+            if ($signature.Status -ne 'NotSigned') { throw "$driver must remain unsigned, but its signature status is $($signature.Status)." }
+          }
+
       - name: Package release and checksums
         id: package
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
-          $assetName = "CheatEngine-Windows-x86-x64-AVX2-$($env:GITHUB_SHA.Substring(0, 12)).zip"
+          $shortSha = $env:GITHUB_SHA.Substring(0, 12)
           $staging = Join-Path $env:RUNNER_TEMP 'CheatEngine-Windows'
-          $payload = Join-Path $staging 'CheatEngine'
+          $assetDirectory = Join-Path $PWD 'release-assets'
           Remove-Item $staging -Recurse -Force -ErrorAction SilentlyContinue
-          New-Item -ItemType Directory -Path $payload -Force | Out-Null
-          Copy-Item 'Cheat Engine\bin' (Join-Path $payload 'bin') -Recurse -Force
-          Compress-Archive -Path $payload -DestinationPath $assetName -CompressionLevel Optimal
-          (Get-FileHash $assetName -Algorithm SHA256).Hash.ToLower() + "  $assetName" | Set-Content "$assetName.sha256" -NoNewline
-          "asset_name=$assetName" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+          Remove-Item $assetDirectory -Recurse -Force -ErrorAction SilentlyContinue
+          New-Item -ItemType Directory -Path $staging, $assetDirectory -Force | Out-Null
+
+          function New-AppPackage([string] $variant, [string] $executable) {
+            $packageRoot = Join-Path $staging $variant
+            $payload = Join-Path $packageRoot 'CheatEngine'
+            New-Item -ItemType Directory -Path $payload -Force | Out-Null
+            Copy-Item 'Cheat Engine\bin' (Join-Path $payload 'bin') -Recurse -Force
+            Get-ChildItem (Join-Path $payload 'bin\cheatengine-*.exe') |
+              Where-Object Name -ne $executable |
+              Remove-Item -Force
+            Remove-Item (Join-Path $payload 'bin\DBK32.sys'), (Join-Path $payload 'bin\DBK64.sys') -Force
+
+            $assetName = "CheatEngine-Windows-$variant-$shortSha.zip"
+            $assetPath = Join-Path $assetDirectory $assetName
+            Compress-Archive -Path $payload -DestinationPath $assetPath -CompressionLevel Optimal
+            return $assetPath
+          }
+
+          $win32Asset = New-AppPackage 'x86' 'cheatengine-i386.exe'
+          $win64Asset = New-AppPackage 'x64' 'cheatengine-x86_64.exe'
+          $avx2Asset = New-AppPackage 'x64-AVX2' 'cheatengine-x86_64-SSE4-AVX2.exe'
+
+          $driverRoot = Join-Path $staging 'DBK-Unsigned\CheatEngine-DBK-Unsigned'
+          New-Item -ItemType Directory -Path $driverRoot -Force | Out-Null
+          Copy-Item 'Cheat Engine\bin\DBK32.sys', 'Cheat Engine\bin\DBK64.sys' $driverRoot
+          @"
+          Cheat Engine DBK 未签名驱动
+
+          DBK32.sys 用于 32 位 Windows，DBK64.sys 用于 64 位 Windows。
+          请把与系统架构对应的驱动复制到 Cheat Engine 的 bin 目录。
+
+          这些驱动没有附带代码签名，不能在启用常规驱动签名强制的 Windows 中直接加载。
+          使用前需要自行签名、安装自己的测试证书，并以管理员身份开启 Windows 测试签名模式：
+
+              bcdedit /set testsigning on
+
+          重启后设置才会生效。启用 Secure Boot 的电脑通常需要先关闭 Secure Boot。
+          内核驱动具有较高系统权限，仅应在个人研究或隔离测试环境中使用。
+          "@ | Set-Content (Join-Path $driverRoot '使用说明.txt') -Encoding utf8
+          $driverAsset = Join-Path $assetDirectory "CheatEngine-DBK-Unsigned-x86-x64-$shortSha.zip"
+          Compress-Archive -Path $driverRoot -DestinationPath $driverAsset -CompressionLevel Optimal
+
+          function Test-AppArchive([string] $archivePath, [string] $expectedExecutable) {
+            $archive = [System.IO.Compression.ZipFile]::OpenRead($archivePath)
+            try {
+              $mainExecutables = @($archive.Entries | Where-Object Name -Like 'cheatengine-*.exe' | ForEach-Object Name)
+              if (($mainExecutables.Count -ne 1) -or ($mainExecutables[0] -ne $expectedExecutable)) {
+                throw "Unexpected main executables in $(Split-Path $archivePath -Leaf): $($mainExecutables -join ', ')"
+              }
+              if ($archive.Entries | Where-Object Name -In 'DBK32.sys', 'DBK64.sys') {
+                throw "A DBK driver was included in the application package: $archivePath"
+              }
+            } finally {
+              $archive.Dispose()
+            }
+          }
+
+          Test-AppArchive $win32Asset 'cheatengine-i386.exe'
+          Test-AppArchive $win64Asset 'cheatengine-x86_64.exe'
+          Test-AppArchive $avx2Asset 'cheatengine-x86_64-SSE4-AVX2.exe'
+
+          $driverArchive = [System.IO.Compression.ZipFile]::OpenRead($driverAsset)
+          try {
+            $driverNames = @($driverArchive.Entries | Where-Object Name -Like 'DBK*.sys' | ForEach-Object Name | Sort-Object)
+            if (($driverNames.Count -ne 2) -or ($driverNames[0] -ne 'DBK32.sys') -or ($driverNames[1] -ne 'DBK64.sys')) {
+              throw "Unexpected DBK driver package contents: $($driverNames -join ', ')"
+            }
+            if ($driverArchive.Entries | Where-Object Name -Like 'cheatengine-*.exe') {
+              throw 'The DBK driver package must not contain a Cheat Engine executable.'
+            }
+          } finally {
+            $driverArchive.Dispose()
+          }
+
+          foreach ($asset in $win32Asset, $win64Asset, $avx2Asset, $driverAsset) {
+            $assetName = Split-Path $asset -Leaf
+            (Get-FileHash $asset -Algorithm SHA256).Hash.ToLower() + "  $assetName" |
+              Set-Content "$asset.sha256" -NoNewline
+          }
+
+          "win32_asset=$win32Asset" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+          "win64_asset=$win64Asset" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+          "avx2_asset=$avx2Asset" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+          "driver_asset=$driverAsset" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
 
       - name: Publish the rolling prerelease
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
-          ASSET_NAME: ${{ steps.package.outputs.asset_name }}
+          WIN32_ASSET: ${{ steps.package.outputs.win32_asset }}
+          WIN64_ASSET: ${{ steps.package.outputs.win64_asset }}
+          AVX2_ASSET: ${{ steps.package.outputs.avx2_asset }}
+          DRIVER_ASSET: ${{ steps.package.outputs.driver_asset }}
         run: |
           $ErrorActionPreference = 'Stop'
           git config user.name 'github-actions[bot]'
@@ -136,13 +303,14 @@ jobs:
 
           ## 压缩包内容
 
-          请完整解压后再运行，不要单独移动可执行文件。压缩包同时包含以下 Windows 程序：
+          请根据系统和处理器选择一个主程序压缩包，完整解压后再运行：
 
-          - ``bin\cheatengine-i386.exe``：32 位 Windows。
-          - ``bin\cheatengine-x86_64.exe``：通用 64 位 Windows，推荐大多数电脑使用。
-          - ``bin\cheatengine-x86_64-SSE4-AVX2.exe``：支持 AVX2 指令集的 64 位电脑。
+          - ``CheatEngine-Windows-x86-*.zip``：32 位 Windows。
+          - ``CheatEngine-Windows-x64-*.zip``：通用 64 位 Windows，推荐大多数电脑使用。
+          - ``CheatEngine-Windows-x64-AVX2-*.zip``：支持 AVX2 指令集的 64 位电脑。
+          - ``CheatEngine-DBK-Unsigned-x86-x64-*.zip``：未签名 DBK32/DBK64 内核驱动，按需单独下载。
 
-          同时包含 Lua、调试符号、Direct3D Hook 和其他运行所需文件。``.sha256`` 文件用于验证压缩包完整性。
+          每个主程序包只包含一个 Cheat Engine 主程序，但会保留跨位数分析所需的辅助组件。DBK 驱动不会放入主程序包；使用前必须自行签名并开启 Windows 测试签名模式，具体说明见驱动包和仓库 README。每个 ZIP 都有对应的 ``.sha256`` 文件。
           "@
 
           gh release view ci-latest *> $null
@@ -152,19 +320,35 @@ jobs:
             gh release edit ci-latest --target $env:GITHUB_SHA --title 'Cheat Engine Windows 自动构建' --notes $releaseNotes --prerelease
           }
 
-          $oldAssets = gh release view ci-latest --json assets --jq '.assets[].name'
+          gh release upload ci-latest `
+            "$env:WIN32_ASSET#Windows 32 位主程序" "$env:WIN32_ASSET.sha256#Windows 32 位 SHA-256" `
+            "$env:WIN64_ASSET#Windows 通用 64 位主程序" "$env:WIN64_ASSET.sha256#Windows 通用 64 位 SHA-256" `
+            "$env:AVX2_ASSET#Windows AVX2 64 位主程序" "$env:AVX2_ASSET.sha256#Windows AVX2 64 位 SHA-256" `
+            "$env:DRIVER_ASSET#未签名 DBK32 与 DBK64 驱动" "$env:DRIVER_ASSET.sha256#未签名 DBK 驱动 SHA-256" `
+            --clobber
+          if ($LASTEXITCODE -ne 0) { throw 'Could not upload one or more release assets.' }
+
+          $win32Name = Split-Path $env:WIN32_ASSET -Leaf
+          $win64Name = Split-Path $env:WIN64_ASSET -Leaf
+          $avx2Name = Split-Path $env:AVX2_ASSET -Leaf
+          $driverName = Split-Path $env:DRIVER_ASSET -Leaf
+          $newAssets = @($win32Name, "$win32Name.sha256", $win64Name, "$win64Name.sha256", $avx2Name, "$avx2Name.sha256", $driverName, "$driverName.sha256")
+          $publishedAssets = gh release view ci-latest --json assets --jq '.assets[].name'
           if ($LASTEXITCODE -ne 0) { throw 'Could not list existing release assets.' }
-          foreach ($oldAsset in $oldAssets) {
-            gh release delete-asset ci-latest $oldAsset --yes
-            if ($LASTEXITCODE -ne 0) { throw "Could not delete stale release asset: $oldAsset" }
+          foreach ($publishedAsset in $publishedAssets) {
+            if ($publishedAsset -notin $newAssets) {
+              gh release delete-asset ci-latest $publishedAsset --yes
+              if ($LASTEXITCODE -ne 0) { throw "Could not delete stale release asset: $publishedAsset" }
+            }
           }
-          gh release upload ci-latest "$env:ASSET_NAME#Windows x86、x64 与 AVX2 完整包" "$env:ASSET_NAME.sha256#SHA-256 校验文件" --clobber
 
       - name: Upload payload for failed release jobs
         if: failure()
         uses: actions/upload-artifact@v4
         with:
           name: failed-cheat-engine-build-${{ github.sha }}
-          path: Cheat Engine/bin
+          path: |
+            Cheat Engine/bin
+            release-assets
           if-no-files-found: ignore
           retention-days: 7
