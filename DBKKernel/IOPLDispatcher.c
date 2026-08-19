@@ -2437,23 +2437,34 @@ NTSTATUS DispatchIoctl(IN PDEVICE_OBJECT DeviceObject, IN PIRP Irp)
 					UINT64 ProcessID;
 				} *inp;
 				PEPROCESS selectedprocess;
+				UINT64 processid;
+				int listSize;
 
 				PVOID BaseAddress;
 				SIZE_T RegionSize;
 
 				inp = Irp->AssociatedIrp.SystemBuffer;
-				DbgPrint("IOCTL_CE_ENUMACCESSEDMEMORY(%d)\n", inp->ProcessID);
+				processid = inp->ProcessID;
+				*(int *)Irp->AssociatedIrp.SystemBuffer = 0;
+				DbgPrint("IOCTL_CE_ENUMACCESSEDMEMORY(%d)\n", processid);
 
 
 				ntStatus = STATUS_UNSUCCESSFUL;
 
-				if (PsLookupProcessByProcessId((PVOID)(UINT_PTR)(inp->ProcessID), &selectedprocess) == STATUS_SUCCESS)
+				ntStatus = PsLookupProcessByProcessId((PVOID)(UINT_PTR)processid, &selectedprocess);
+				if (NT_SUCCESS(ntStatus))
 				{
-					*(int *)Irp->AssociatedIrp.SystemBuffer = enumAllAccessedPages(selectedprocess);
+					listSize = enumAllAccessedPages(selectedprocess);
 					ObDereferenceObject(selectedprocess);
+					if (listSize < 0)
+						ntStatus = STATUS_INSUFFICIENT_RESOURCES;
+					else
+					{
+						*(int *)Irp->AssociatedIrp.SystemBuffer = listSize;
+						ntStatus = STATUS_SUCCESS;
+					}
 				}
 
-				ntStatus = STATUS_SUCCESS;
 				break;
 			}
 

@@ -692,9 +692,10 @@ UINT_PTR getPageTableBase()
 
 }
 
-typedef void PRESENTPAGECALLBACK(UINT_PTR StartAddress, UINT_PTR EndAddress, struct PTEStruct *pageEntry);
+typedef BOOLEAN PRESENTPAGECALLBACK(UINT_PTR StartAddress, UINT_PTR EndAddress, struct PTEStruct *pageEntry);
 BOOL walkPagingLayout(PEPROCESS PEProcess, UINT_PTR MaxAddress, PRESENTPAGECALLBACK OnPresentPage)
 {
+	BOOLEAN walkSucceeded = TRUE;
 #ifdef AMD64
 	UINT_PTR pagebase = getPageTableBase();
 #else
@@ -757,7 +758,11 @@ BOOL walkPagingLayout(PEPROCESS PEProcess, UINT_PTR MaxAddress, PRESENTPAGECALLB
 				if (PPDPE->PS) //some systems have 1GB page support. But not sure windows uses these
 				{
 					DbgPrint("----->%llx is a 1GB range", currentAddress);
-					OnPresentPage(currentAddress, currentAddress + 0x40000000 - 1, PPDPE);
+					if (!OnPresentPage(currentAddress, currentAddress + 0x40000000 - 1, PPDPE))
+					{
+						walkSucceeded = FALSE;
+						__leave;
+					}
 					currentAddress += 0x40000000;
 					continue;
 				}
@@ -777,7 +782,11 @@ BOOL walkPagingLayout(PEPROCESS PEProcess, UINT_PTR MaxAddress, PRESENTPAGECALLB
 
 				if (PPDE->PS)
 				{
-					OnPresentPage(currentAddress, currentAddress + PAGE_SIZE_LARGE-1, PPDE);					
+					if (!OnPresentPage(currentAddress, currentAddress + PAGE_SIZE_LARGE-1, PPDE))
+					{
+						walkSucceeded = FALSE;
+						__leave;
+					}
 					currentAddress += PAGE_SIZE_LARGE;
 					continue;
 				}
@@ -791,7 +800,11 @@ BOOL walkPagingLayout(PEPROCESS PEProcess, UINT_PTR MaxAddress, PRESENTPAGECALLB
 					continue;
 				}
 				
-				OnPresentPage(currentAddress, currentAddress + 0xfff, PPTE);				
+				if (!OnPresentPage(currentAddress, currentAddress + 0xfff, PPTE))
+				{
+					walkSucceeded = FALSE;
+					__leave;
+				}
 				currentAddress += 0x1000;
 			}
 
@@ -807,7 +820,7 @@ BOOL walkPagingLayout(PEPROCESS PEProcess, UINT_PTR MaxAddress, PRESENTPAGECALLB
 		return FALSE;
 	}
 
-	return TRUE;
+	return walkSucceeded;
 }
 
 
@@ -834,7 +847,7 @@ void CleanAccessedList()
 }
 	
 
-void StoreAccessedRanges(UINT_PTR StartAddress, UINT_PTR EndAddress, struct PTEStruct *pageEntry)
+BOOLEAN StoreAccessedRanges(UINT_PTR StartAddress, UINT_PTR EndAddress, struct PTEStruct *pageEntry)
 {
 	if (pageEntry->A)
 	{		
@@ -845,6 +858,9 @@ void StoreAccessedRanges(UINT_PTR StartAddress, UINT_PTR EndAddress, struct PTES
 			//insert
 			PPENTRY e;
 			e = ExAllocatePool(PagedPool, sizeof(PENTRY));
+			if (e == NULL)
+				return FALSE;
+
 			e->Range.StartAddress = StartAddress;
 			e->Range.EndAddress = EndAddress;
 			e->Next = AccessedList;
@@ -853,8 +869,9 @@ void StoreAccessedRanges(UINT_PTR StartAddress, UINT_PTR EndAddress, struct PTES
 			AccessedListSize++;
 		}
 
-		
 	}
+
+	return TRUE;
 }
 
 
@@ -874,7 +891,10 @@ int enumAllAccessedPages(PEPROCESS PEProcess)
 		return AccessedListSize*sizeof(PRANGE);
 	}
 	else
-		return 0;
+	{
+		CleanAccessedList();
+		return -1;
+	}
 }
 
 int getAccessedPageList(PPRANGE List, int ListSizeInBytes)
@@ -906,9 +926,10 @@ int getAccessedPageList(PPRANGE List, int ListSizeInBytes)
 }
 
 
-void MarkPageAsNotAccessed(UINT_PTR StartAddress, UINT_PTR EndAddress, struct PTEStruct *pageEntry)
+BOOLEAN MarkPageAsNotAccessed(UINT_PTR StartAddress, UINT_PTR EndAddress, struct PTEStruct *pageEntry)
 {
 	pageEntry->A = 0;
+	return TRUE;
 }
 
 NTSTATUS markAllPagesAsNeverAccessed(PEPROCESS PEProcess)
