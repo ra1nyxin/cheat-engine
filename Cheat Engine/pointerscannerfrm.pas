@@ -1528,9 +1528,8 @@ begin
       resultidcolumnsave:=true;
       if messagedlg(rsPSExportToDatabaseBiggerSizeOrNot_resultid, mtConfirmation, [mbyes, mbno], 0) = mrno then resultidcolumnsave:=false;
 
-      //for j:=0 to Pointerscanresults.count-1 do
       j:=0;
-      while j<=Pointerscanresults.count-1 do
+      while j<Pointerscanresults.count do
       begin
         offsetlist:='';
         offsetvalues:='';
