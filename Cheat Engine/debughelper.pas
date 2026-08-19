@@ -3553,6 +3553,9 @@ begin
   if eventhandler <> nil then
     FreeAndNil(eventhandler);
 
+  if CurrentDebuggerInterface<>nil then
+    FreeAndNil(CurrentDebuggerInterface);
+
 
 
   inherited Destroy;

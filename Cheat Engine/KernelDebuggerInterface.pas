@@ -62,6 +62,7 @@ type
 
 
     function DebugActiveProcess(dwProcessId: DWORD): WINBOOL; override;
+    function DebugActiveProcessStop(dwProcessId: DWORD): WINBOOL; override;
     function EventCausedByDBVM: boolean;
 
     function isInjectedEvent: boolean; override;
@@ -212,6 +213,7 @@ begin
 
     threadpoller:=TThreadPoller.Create(true);
     threadpoller.pid:=pid;
+    threadpoller.di:=self;
 
     tl:=tlist.create;
     try
@@ -248,6 +250,73 @@ begin
     raise exception.create(rsDBKDebug_StartDebuggingFailed);
 
 
+end;
+
+function TKernelDebugInterface.DebugActiveProcessStop(dwProcessId: DWORD): WINBOOL;
+var
+  injectedEvent: PInjectedEvent;
+  iterator: TMapIterator;
+  threadhandle: THandle;
+begin
+  result:=true;
+
+  if threadpoller<>nil then
+  begin
+    threadpoller.Terminate;
+    threadpoller.WaitFor;
+    freeandnil(threadpoller);
+  end;
+
+  if currentthread<>0 then
+  begin
+    ResumeThread(currentthread);
+    currentthread:=0;
+  end;
+
+  if NeedsToContinue then
+  begin
+    DBKDebug_ContinueDebugEvent(false);
+    NeedsToContinue:=false;
+  end;
+
+  if pid<>0 then
+  begin
+    result:=DBKDebug_StopDebugging;
+    pid:=0;
+  end;
+
+  if (injectedEvents<>nil) and (injectedEventsCS<>nil) then
+  begin
+    injectedEventsCS.Enter;
+    try
+      while injectedEvents.Count>0 do
+      begin
+        injectedEvent:=injectedEvents.Pop;
+        if injectedEvent<>nil then
+          freemem(injectedEvent);
+      end;
+    finally
+      injectedEventsCS.Leave;
+    end;
+  end;
+
+  if threads<>nil then
+  begin
+    iterator:=TMapIterator.Create(threads);
+    try
+      iterator.First;
+      while not iterator.EOM do
+      begin
+        iterator.GetData(threadhandle);
+        if threadhandle<>0 then
+          CloseHandle(threadhandle);
+        iterator.Next;
+      end;
+    finally
+      iterator.Free;
+    end;
+    threads.Clear;
+  end;
 end;
 
 function TKernelDebugInterface.SetThreadContext(hThread: THandle; const lpContext: TContext; isFrozenThread: Boolean=false): BOOL;
@@ -540,17 +609,13 @@ end;
 
 destructor TKernelDebugInterface.destroy;
 begin
+  DebugActiveProcessStop(pid);
+
   if injectedEvents<>nil then
     injectedEvents.free;
 
-  if threadpoller<>nil then
-    threadpoller.free;
-
   if injectedEventsCS<>nil then
     injectedEventsCS.free;
-
-  if pid<>0 then
-    DBKDebug_StopDebugging;
 
   if threads<>nil then
     threads.free;
