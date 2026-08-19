@@ -1172,9 +1172,9 @@ begin
 
       index:=0;
       for j:=0 to TCC_OpenFiles.Count-1 do
-        if TCC_OpenFiles[i]=nil then
+        if TCC_OpenFiles[j]=nil then
         begin
-          TCC_OpenFiles[i]:=temp;
+          TCC_OpenFiles[j]:=temp;
           exit($7ce00000+j);
         end;
 
@@ -1860,4 +1860,3 @@ initialization
   initTCCLib;
 
 end.
-
