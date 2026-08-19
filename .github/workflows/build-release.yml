@@ -238,7 +238,10 @@ jobs:
             Get-ChildItem (Join-Path $payload 'bin\cheatengine-*.exe') |
               Where-Object Name -ne $executable |
               Remove-Item -Force
-            Remove-Item (Join-Path $payload 'bin\DBK32.sys'), (Join-Path $payload 'bin\DBK64.sys') -Force
+            Remove-Item (Join-Path $payload 'bin\DBKKernel') -Recurse -Force -ErrorAction SilentlyContinue
+            Get-ChildItem (Join-Path $payload 'bin') -File |
+              Where-Object BaseName -In 'DBK32', 'DBK64' |
+              Remove-Item -Force
 
             $assetName = "CheatEngine-Windows-$variant-$shortSha.zip"
             $assetPath = Join-Path $assetDirectory $assetName
