@@ -5543,15 +5543,17 @@ begin
   begin
 
     //go through the stack and find a entry that falls in executable memory
-    ReadProcessMemory(processhandle, pointer(contexthandler.StackPointerRegister^.getValue(context)), @stack[0], 4096, x);
-    for i:=0 to (x div processhandler.pointersize) do
-    begin
-      if symhandler.inModule(stack[i]) and isExecutableAddress(stack[i]) then
+    x:=0;
+    if ReadProcessMemory(processhandle, pointer(contexthandler.StackPointerRegister^.getValue(context)), @stack[0], 4096, x) and
+       (x>=processhandler.pointersize) then
+      for i:=0 to integer(x div processhandler.pointersize)-1 do
       begin
-        result:=stack[i]; //best guess, it's an address specifier, it falls inside a module, and it's executable
-        exit;
+        if symhandler.inModule(stack[i]) and isExecutableAddress(stack[i]) then
+        begin
+          result:=stack[i]; //best guess, it's an address specifier, it falls inside a module, and it's executable
+          exit;
+        end;
       end;
-    end;
   end;
 end;
 
