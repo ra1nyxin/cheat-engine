@@ -38,6 +38,8 @@ PVOID *Ultimap2_DataReady;
 FAST_MUTEX Ultimap2WaiterMutex;
 KEVENT Ultimap2WaitersDrained;
 volatile LONG Ultimap2WaiterCount;
+KEVENT Ultimap2SwapsDrained;
+volatile LONG Ultimap2SwapCount;
 volatile BOOLEAN Ultimap2Stopping = TRUE;
 
 
@@ -505,8 +507,18 @@ DPC routine that switches the Buffer pointer and marks buffer2 that it's ready f
 Only called when buffer2 is ready for flushing
 */
 {
+	ULONG cpunr;
+	PProcessorInfo pi;
+
+	if (!UltimapActive || Ultimap2Stopping || (PInfo == NULL))
+		return;
+
+	cpunr = KeGetCurrentProcessorNumber();
+	if (cpunr >= (ULONG)Ultimap2CpuCount)
+		return;
+
 	//write the contents of the current cpu buffer
-	PProcessorInfo pi = PInfo[KeGetCurrentProcessorNumber()];
+	pi = PInfo[cpunr];
 
 	//DbgPrint("SwitchToPABuffer for cpu %d\n", KeGetCurrentProcessorNumber());
 
@@ -616,23 +628,54 @@ Only called when buffer2 is ready for flushing
 
 void WaitForWriteToFinishAndSwapWriteBuffers(BOOL interruptedOnly)
 {
-    int i;
-	
-	for (i = 0; i < Ultimap2CpuCount; i++)
+	int i;
+	BOOLEAN swapRegistered = FALSE;
+
+	if (!UltimapActive || Ultimap2Stopping)
+		return;
+
+	ExAcquireFastMutex(&Ultimap2WaiterMutex);
+	if (UltimapActive && !Ultimap2Stopping && PInfo && (Ultimap2CpuCount > 0))
 	{
-		PProcessorInfo pi = PInfo[i];
-		if ((pi->ToPABuffer2) && ((pi->Interrupted) || (!interruptedOnly)))
-		{
-			KeWaitForSingleObject(&pi->Buffer2ReadyForSwap, Executive, KernelMode, FALSE, NULL);
-
-			if (!UltimapActive) return;
-
-			KeInsertQueueDpc(&pi->OwnDPC, NULL, NULL);
-		}
-		
+		if (InterlockedIncrement(&Ultimap2SwapCount) == 1)
+			KeClearEvent(&Ultimap2SwapsDrained);
+		swapRegistered = TRUE;
 	}
+	ExReleaseFastMutex(&Ultimap2WaiterMutex);
 
-	KeFlushQueuedDpcs();
+	if (!swapRegistered)
+		return;
+
+	__try
+	{
+		for (i = 0; i < Ultimap2CpuCount; i++)
+		{
+			PProcessorInfo pi;
+
+			if (!UltimapActive || Ultimap2Stopping || (PInfo == NULL))
+				__leave;
+
+			pi = PInfo[i];
+			if (pi && (pi->ToPABuffer2) && ((pi->Interrupted) || (!interruptedOnly)))
+			{
+				KeWaitForSingleObject(&pi->Buffer2ReadyForSwap, Executive, KernelMode, FALSE, NULL);
+
+				if (!UltimapActive || Ultimap2Stopping)
+					__leave;
+
+				KeInsertQueueDpc(&pi->OwnDPC, NULL, NULL);
+			}
+		}
+
+		KeFlushQueuedDpcs();
+	}
+	__finally
+	{
+		ExAcquireFastMutex(&Ultimap2WaiterMutex);
+		if (InterlockedDecrement(&Ultimap2SwapCount) == 0)
+			KeSetEvent(&Ultimap2SwapsDrained, 0, FALSE);
+		ExReleaseFastMutex(&Ultimap2WaiterMutex);
+	}
 }
 
 void bufferWriterThread(PVOID StartContext)
@@ -788,6 +831,9 @@ NTSTATUS ultimap2_flushBuffers()
 
 void RTIT_DPC_Handler(__in struct _KDPC *Dpc, __in_opt PVOID DeferredContext, __in_opt PVOID SystemArgument1,__in_opt PVOID SystemArgument2)
 {
+	if (!UltimapActive || Ultimap2Stopping)
+		return;
+
 	//Signal the bufferWriterThread
 	KeSetEvent(&SuspendEvent, 0, FALSE);
 	KeSetEvent(&FlushData, 0, FALSE);
@@ -798,7 +844,7 @@ void PMI(__in struct _KINTERRUPT *Interrupt, __in PVOID ServiceContext)
 {
 	//check if caused by me, if so defer to dpc
 	DbgPrint("PMI");
-	if ((!UltimapActive) || (PInfo == NULL))
+	if ((!UltimapActive) || Ultimap2Stopping || (PInfo == NULL))
 	{
 		apic_clearPerfmon();
 		return;
@@ -1560,6 +1606,8 @@ NTSTATUS SetupUltimap2(UINT32 PID, UINT32 BufferSize, WCHAR *Path, int rangeCoun
 	ExInitializeFastMutex(&Ultimap2WaiterMutex);
 	KeInitializeEvent(&Ultimap2WaitersDrained, NotificationEvent, TRUE);
 	Ultimap2WaiterCount = 0;
+	KeInitializeEvent(&Ultimap2SwapsDrained, NotificationEvent, TRUE);
+	Ultimap2SwapCount = 0;
 	Ultimap2Stopping = FALSE;
 
 
@@ -1744,17 +1792,23 @@ void DisableUltimap2(void)
 		return;
 	ultimapEnabled = FALSE;
 
+	ExAcquireFastMutex(&Ultimap2WaiterMutex);
+	Ultimap2Stopping = TRUE;
+	ExReleaseFastMutex(&Ultimap2WaiterMutex);
+
 	DbgPrint("-------------------->DisableUltimap2:Stage 1<------------------");
 	
 	if (!forEachCpuAsync(ultimap2_disable_dpc, NULL, NULL, NULL, NULL))
 	{
+		ExAcquireFastMutex(&Ultimap2WaiterMutex);
+		Ultimap2Stopping = FALSE;
+		ExReleaseFastMutex(&Ultimap2WaiterMutex);
 		ultimapEnabled = TRUE;
 		return;
 	}
 
 	
 	ExAcquireFastMutex(&Ultimap2WaiterMutex);
-	Ultimap2Stopping = TRUE;
 	UltimapActive = FALSE;
 	ExReleaseFastMutex(&Ultimap2WaiterMutex);
 	
@@ -1778,10 +1832,13 @@ void DisableUltimap2(void)
 				{
 					KeSetEvent(&PInfo[i]->DataProcessed, 0, FALSE);
 					KeSetEvent(&PInfo[i]->DataReady, 0, FALSE);
+					KeSetEvent(&PInfo[i]->Buffer2ReadyForSwap, 0, FALSE);
+					KeSetEvent(&PInfo[i]->InitiateSave, 0, FALSE);
 				}
 			}
 		}
 	} while (KeWaitForSingleObject(&Ultimap2WaitersDrained, Executive, KernelMode, FALSE, &waiterDrainInterval) == STATUS_TIMEOUT);
+	KeWaitForSingleObject(&Ultimap2SwapsDrained, Executive, KernelMode, FALSE, NULL);
 
 	if (Ultimap2Handle)
 	{
@@ -1792,6 +1849,7 @@ void DisableUltimap2(void)
 		Ultimap2Handle = NULL;
 	}
 
+	KeFlushQueuedDpcs();
 	
 	if (PInfo)
 	{
