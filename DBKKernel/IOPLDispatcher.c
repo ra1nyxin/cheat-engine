@@ -2534,7 +2534,7 @@ NTSTATUS DispatchIoctl(IN PDEVICE_OBJECT DeviceObject, IN PIRP Irp)
 					vmx_password2=pinp->Password2;
 					vmx_password3=pinp->Password3;
 
-					DbgPrint("new passwords are: %p-%x-%p\n", (void*)vmx_password1, vmx_password2, (void*)vmx_password3);
+					DbgPrint("new passwords are: %I64x-%x-%I64x\n", vmx_password1, vmx_password2, vmx_password3);
 
 					__try
 					{

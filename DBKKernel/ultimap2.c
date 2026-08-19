@@ -1898,7 +1898,7 @@ void DisableUltimap2(void)
 			
 		}
 
-		ExFreePool(PInfo);
+		ExFreePool((PVOID)PInfo);
 		PInfo = NULL;
 
 		DbgPrint("Finished terminating ultimap2");
