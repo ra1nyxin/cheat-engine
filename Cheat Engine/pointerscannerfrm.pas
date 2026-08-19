@@ -106,6 +106,8 @@ type
     luafilter: string; //function name of the luafilter
 
     done: boolean;
+    failed: boolean;
+    errorMessage: string;
     procedure execute; override;
     destructor destroy; override;
   end;
@@ -158,6 +160,7 @@ type
     luafilter: string; //function name of the luafilter
 
     waitforall: boolean;
+    errorMessage: string;
 
     procedure execute; override;
     destructor destroy; override;
@@ -461,6 +464,7 @@ resourcestring
   rsPSTotalQueuesize = 'Total Queuesize: ';
   rsPSPscanguiUpdateTimerError = 'pscangui update timer error: ';
   rsPSREscanning = 'Rescanning';
+  rsPSRescanFailed = 'Pointer rescan failed: %s';
   rsPSFindByAddressPart1 = 'Find by address requires an address. "';
   rsPSFindByAddressPart2 = '" is not a valid address';
   rsAreYouSureYouWishYouForceADisconnect = 'Are you sure you wish you force a disconnect. The current paths will be lost';
@@ -502,7 +506,8 @@ begin
 
   if rescan<>nil then
   begin
-    OpenPointerfile(rescan.filename);
+    if rescan.errorMessage='' then
+      OpenPointerfile(rescan.filename);
     freeandnil(rescan);
   end;
 
@@ -2666,11 +2671,15 @@ var
     lref: integer;
     lfun: integer;
     ltable: integer;
+    luaErrorText: pchar;
+    luaError: string;
 
 
     mr: TMemoryRegion;
 begin
   l:=nil;
+  failed:=false;
+  errorMessage:='';
 
   try
 
@@ -2917,7 +2926,18 @@ begin
                 lua_pushinteger(L, baseaddress);  //base
                 lua_pushvalue(L, ltable);         //offsets
                 lua_pushinteger(L, address);      //address
-                lua_call(L, 3,1);                 //call and don't expect any errors
+                if lua_pcall(L, 3,1,0)<>0 then
+                begin
+                  luaErrorText:=lua_tostring(L, -1);
+                  if luaErrorText<>nil then
+                    luaError:=luaErrorText
+                  else
+                    luaError:='Unknown Lua filter error';
+
+                  lua_pop(L, 1);
+                  raise exception.create(luaError);
+                end;
+
                 valid:=lua_toboolean(L, -1);
                 lua_pop(L, 1);
               end;
@@ -2962,8 +2982,15 @@ begin
   except
     on e: exception do
     begin
+      if e.Message<>'' then
+        errorMessage:=e.Message
+      else
+        errorMessage:='Unknown pointer rescan error';
+      failed:=true;
+      done:=true;
 
-      MessageBox(0, 'FUU', pchar(e.message), 0);
+      if l<>nil then
+        lua_settop(L, 0);
     end;
   end;
 
@@ -3017,6 +3044,7 @@ begin
   progressbar.Max:=100;
   progressbar.Position:=0;
   result:=nil;
+  errorMessage:='';
 
 
   sleep(delay*1000);
@@ -3140,7 +3168,16 @@ begin
           inc(PointersEvaluated,rescanworkers[i].evaluated);
           if not rescanworkers[i].Finished then
             alldone:=false;
+
+          if rescanworkers[i].Finished and rescanworkers[i].failed and
+             (errorMessage='') then
+            errorMessage:=rescanworkers[i].errorMessage;
         end;
+
+        if errorMessage<>'' then
+          for i:=0 to rescanworkercount-1 do
+            if not rescanworkers[i].Finished then
+              rescanworkers[i].Terminate;
 
         progressbar.Position:=min(100, trunc((PointersEvaluated / TotalPointersToEvaluate)*100));
         if not alldone then sleep(250);
@@ -3148,6 +3185,9 @@ begin
     end;
 
     //no timeout, so finished or crashed
+
+    if errorMessage<>'' then
+      exit;
 
 
     //destroy workers
@@ -3212,6 +3252,10 @@ begin
         rescanworkers[i].WaitFor;
         freeandnil(rescanworkers[i]);
       end;
+
+    if errorMessage<>'' then
+      for i:=0 to length(workerstarted)-1 do
+        DeleteFile(filename+'.newresults.'+inttostr(i));
 
     if rescanhelper<>nil then
       freeandnil(rescanhelper);
@@ -3484,18 +3528,31 @@ begin
 end;
 
 procedure tfrmpointerscanner.rescandone(var message: tmessage);
-
+var
+  rescanError: string;
 
 {
 The rescan is done. rescan.oldpointerlist (the current pointerlist) can be deleted
 and the new pointerlist becomes the current pointerlist
 }
 begin
+  rescanError:='';
+  if rescan<>nil then
+    rescanError:=rescan.errorMessage;
+
   doneui;
 
   if rescan<>nil then
     freeandnil(rescan);
-    
+
+  if rescanError<>'' then
+  begin
+    if rescanpointerform<>nil then
+      rescanpointerform.cbRepeat.checked:=false;
+
+    MessageDlg(format(rsPSRescanFailed, [rescanError]), mtError, [mbok], 0);
+    exit;
+  end;
 
 
   if (rescanpointerform<>nil) and rescanpointerform.cbRepeat.checked then
