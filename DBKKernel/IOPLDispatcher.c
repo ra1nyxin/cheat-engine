@@ -1844,50 +1844,69 @@ NTSTATUS DispatchIoctl(IN PDEVICE_OBJECT DeviceObject, IN PIRP Irp)
 					UINT64 mdl;
 				} *outp;
 				KAPC_STATE apc_state;
-				PEPROCESS selectedprocess;
+				PEPROCESS selectedprocess = NULL;
+				PMDL mdl = NULL;
+				BOOLEAN attached = FALSE;
+				BOOLEAN pagesLocked = FALSE;
+				UINT64 processid;
+				UINT64 address;
+				UINT64 size;
 
 				DbgPrint("IOCTL_CE_LOCK_MEMORY");
 				inp = Irp->AssociatedIrp.SystemBuffer;
 				outp = Irp->AssociatedIrp.SystemBuffer;
-				 
-				
+				processid = inp->ProcessID;
+				address = inp->address;
+				size = inp->size;
+				outp->mdl = 0;
 
-				if (PsLookupProcessByProcessId((PVOID)(UINT_PTR)(inp->ProcessID), &selectedprocess) == STATUS_SUCCESS)
+				if ((size == 0) || (size > MAXULONG))
 				{
-					PMDL mdl = NULL;
-					KeStackAttachProcess(selectedprocess, &apc_state);
+					ntStatus = STATUS_INVALID_PARAMETER;
+					break;
+				}
 
+				mdl = IoAllocateMdl((PVOID)(UINT_PTR)address, (ULONG)size, FALSE, FALSE, NULL);
+				if (mdl == NULL)
+				{
+					ntStatus = STATUS_INSUFFICIENT_RESOURCES;
+					break;
+				}
+
+				ntStatus = PsLookupProcessByProcessId((PVOID)(UINT_PTR)processid, &selectedprocess);
+				if (NT_SUCCESS(ntStatus))
+				{
 					__try
 					{
-						mdl = IoAllocateMdl((PVOID)(UINT_PTR)inp->address, (ULONG)inp->size, FALSE, FALSE, NULL);
-						if (mdl)
-						{
-							__try
-							{
-								MmProbeAndLockPages(mdl, UserMode, IoReadAccess);
+						KeStackAttachProcess(selectedprocess, &apc_state);
+						attached = TRUE;
+						MmProbeAndLockPages(mdl, UserMode, IoReadAccess);
+						pagesLocked = TRUE;
+						ntStatus = STATUS_SUCCESS;
 
-								DbgPrint("MmProbeAndLockPages succeeded");
-							}
-							__except (1)
-							{
-								DbgPrint("MmProbeAndLockPages failed");
-								IoFreeMdl(mdl);
-								ntStatus = STATUS_UNSUCCESSFUL;
-								break;
-							}
-
-						}
 					}
-					__finally
+					__except (EXCEPTION_EXECUTE_HANDLER)
 					{
-						KeUnstackDetachProcess(&apc_state);
+						DbgPrint("MmProbeAndLockPages failed");
+						ntStatus = GetExceptionCode();
 					}
 
+					if (attached)
+						KeUnstackDetachProcess(&apc_state);
+					ObDereferenceObject(selectedprocess);
+					selectedprocess = NULL;
+				}
+
+				if (NT_SUCCESS(ntStatus) && pagesLocked)
+				{
 					outp->mdl = (UINT_PTR)mdl;
-
-
 					DbgPrint("Locked the page\n");
-					ntStatus = STATUS_SUCCESS;
+				}
+				else
+				{
+					if (pagesLocked)
+						MmUnlockPages(mdl);
+					IoFreeMdl(mdl);
 				}
 				
 				break;
@@ -1902,8 +1921,22 @@ NTSTATUS DispatchIoctl(IN PDEVICE_OBJECT DeviceObject, IN PIRP Irp)
 			DbgPrint("IOCTL_CE_UNLOCK_MEMORY");
 			inp = Irp->AssociatedIrp.SystemBuffer;
 
-			MmUnlockPages((PMDL)(UINT_PTR)inp->mdl);
-			IoFreeMdl((PMDL)(UINT_PTR)inp->mdl);
+			if (inp->mdl == 0)
+			{
+				ntStatus = STATUS_INVALID_PARAMETER;
+				break;
+			}
+
+			__try
+			{
+				MmUnlockPages((PMDL)(UINT_PTR)inp->mdl);
+				IoFreeMdl((PMDL)(UINT_PTR)inp->mdl);
+				ntStatus = STATUS_SUCCESS;
+			}
+			__except (EXCEPTION_EXECUTE_HANDLER)
+			{
+				ntStatus = GetExceptionCode();
+			}
 			break;
 		}
 
