@@ -528,17 +528,24 @@ NTSTATUS ReadPhysicalMemory(char *startaddress, UINT_PTR bytestoread, void *outp
 	WCHAR			physmemName[] = L"\\device\\physicalmemory";
 	UCHAR*			memoryview;
 	NTSTATUS		ntStatus = STATUS_UNSUCCESSFUL;
-	PMDL			outputMDL;
+	PMDL			outputMDL = NULL;
+	UINT64			maxAddress = getMaxPhysAddress();
 
 	DbgPrint("ReadPhysicalMemory(%p, %d, %p)", startaddress, bytestoread, output);
 
-	if (((UINT64)startaddress > getMaxPhysAddress()) || ((UINT64)startaddress + bytestoread > getMaxPhysAddress()))
+	if ((output == NULL) || (bytestoread == 0) || (bytestoread > MAXULONG))
+		return STATUS_INVALID_PARAMETER;
+
+	if (((UINT64)startaddress > maxAddress) || ((bytestoread - 1) > (maxAddress - (UINT64)startaddress)))
 	{
 		DbgPrint("Invalid physical address\n");
-		return ntStatus;
+		return STATUS_INVALID_ADDRESS;
 	}
 	
 	outputMDL = IoAllocateMdl(output, (ULONG)bytestoread, FALSE, FALSE, NULL);
+	if (outputMDL == NULL)
+		return STATUS_INSUFFICIENT_RESOURCES;
+
 	__try
 	{
 		MmProbeAndLockPages(outputMDL, KernelMode, IoWriteAccess);
