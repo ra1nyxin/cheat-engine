@@ -424,11 +424,14 @@ begin
       if (currentRegion=-1) or (address>pm^[currentregion].baseaddress+pm^[currentregion].memorysize) then
         inc(currentRegion);
 
-      while (address>pm[currentregion].baseaddress+pm^[currentregion].memorysize) and (currentregion<maxnumberofregions) do
+      while (currentregion<maxnumberofregions) and
+            (address>pm^[currentregion].baseaddress+pm^[currentregion].memorysize) do
         inc(currentRegion);
 
       if currentregion>=maxnumberofregions then
       begin
+        currentRegion:=-1;
+        currentSubRegion:=0;
         if AllowNotFound = false then
           raise ESavedScanException.create(Format(rsFailureInFindingInThePreviousScanResults, [inttohex(address, 8)]))
         else
