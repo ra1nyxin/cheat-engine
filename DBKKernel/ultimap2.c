@@ -12,6 +12,8 @@
 #include "ultimap2\apic.h"
 #include "ultimap2.h"
 
+#define KAFFINITY_BIT_COUNT (sizeof(KAFFINITY) * 8)
+
 
 PSSUSPENDPROCESS PsSuspendProcess;
 PSSUSPENDPROCESS PsResumeProcess;
@@ -330,7 +332,15 @@ void createUltimap2OutputFile(int cpunr)
 void WriteThreadForSpecificCPU(PVOID StartContext)
 {
 	int cpunr = (int)(UINT_PTR)StartContext;
-	PProcessorInfo pi = PInfo[cpunr];
+	PProcessorInfo pi;
+	KAFFINITY affinity;
+
+	if ((cpunr < 0) || (cpunr >= Ultimap2CpuCount) || ((ULONG)cpunr >= KAFFINITY_BIT_COUNT) || (PInfo == NULL))
+		return;
+
+	pi = PInfo[cpunr];
+	if (pi == NULL)
+		return;
 	
 
 
@@ -354,7 +364,8 @@ void WriteThreadForSpecificCPU(PVOID StartContext)
 	}
 
 	
-	KeSetSystemAffinityThread((KAFFINITY)(1 << cpunr));
+	affinity = ((KAFFINITY)1) << (ULONG)cpunr;
+	KeSetSystemAffinityThread(affinity);
 	
 	while (UltimapActive)
 	{
@@ -747,7 +758,7 @@ void bufferWriterThread(PVOID StartContext)
 
 					//check if no interrupt has been triggered while this was busy ('could' happen as useless info like core ratio is still recorded)
 					found = FALSE;
-					for (i = 0; i < KeQueryMaximumProcessorCount(); i++)
+					for (i = 0; i < (unsigned int)Ultimap2CpuCount; i++)
 					{
 						if (PInfo[i]->Interrupted)
 						{
@@ -1619,7 +1630,7 @@ NTSTATUS SetupUltimap2(UINT32 PID, UINT32 BufferSize, WCHAR *Path, int rangeCoun
 	Ultimap2Stopping = FALSE;
 
 
-	Ultimap2CpuCount = KeQueryMaximumProcessorCount();
+	Ultimap2CpuCount = min(KeQueryMaximumProcessorCount(), KAFFINITY_BIT_COUNT);
 
 	PInfo = ExAllocatePool(NonPagedPool, Ultimap2CpuCount*sizeof(PProcessorInfo));
 	Ultimap2_DataReady = ExAllocatePool(NonPagedPool, Ultimap2CpuCount*sizeof(PVOID));

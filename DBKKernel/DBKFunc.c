@@ -4,6 +4,8 @@
 #include <ntddk.h>
 #include "DBKFunc.h"
 
+#define KAFFINITY_BIT_COUNT (sizeof(KAFFINITY) * 8)
+
 /*
 #include "vmxhelper.h"
 #include "interruptHook.h"
@@ -57,7 +59,9 @@ calls a specific function for each cpu that runs in passive mode
 			//DbgPrint("Calling passive function for cpunr %d\n", cpunr);
 			//set affinity
 
-			newaffinity=(KAFFINITY)(1 << cpunr);
+			if ((ULONG)(UCHAR)cpunr >= KAFFINITY_BIT_COUNT)
+				break;
+			newaffinity = ((KAFFINITY)1) << (ULONG)(UCHAR)cpunr;
 
 #if (NTDDI_VERSION >= NTDDI_VISTA)
 			oldaffinity=KeSetSystemAffinityThreadEx(newaffinity);
@@ -95,6 +99,14 @@ calls a specific function for each cpu that runs in passive mode
 BOOLEAN forOneCpu(CCHAR cpunr, PKDEFERRED_ROUTINE dpcfunction, PVOID DeferredContext, PVOID  SystemArgument1, PVOID  SystemArgument2, OPTIONAL PPREDPC_CALLBACK preDPCCallback)
 {
 	PKDPC dpc;
+	KAFFINITY affinity;
+
+	if ((cpunr < 0) || ((ULONG)(UCHAR)cpunr >= KAFFINITY_BIT_COUNT))
+		return FALSE;
+
+	affinity = ((KAFFINITY)1) << (ULONG)(UCHAR)cpunr;
+	if ((KeQueryActiveProcessors() & affinity) == 0)
+		return FALSE;
 
 	dpc = ExAllocatePool(NonPagedPool, sizeof(KDPC));
 	if (dpc == NULL)
