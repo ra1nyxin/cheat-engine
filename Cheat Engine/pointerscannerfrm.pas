@@ -2741,8 +2741,12 @@ begin
             begin
               //don't care or in range.
 
+              if (length(startOffsetValues)>p.offsetcount) or
+                 (length(endoffsetvalues)>p.offsetcount) then
+                valid:=false;
+
               //check if start offet values are given
-              if length(startOffsetValues)>0 then
+              if valid and (length(startOffsetValues)>0) then
               begin
                 //check the offsets
                 for i:=0 to length(startOffsetValues)-1 do
