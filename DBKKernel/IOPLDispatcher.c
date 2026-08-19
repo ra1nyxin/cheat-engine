@@ -255,7 +255,7 @@ static NTSTATUS ValidateIoctlBufferLengths(ULONG ioctl, PVOID buffer, ULONG inpu
 		break;
 
 	case IOCTL_CE_GET_PEB:
-		REQUIRE_INPUT(sizeof(PEPROCESS));
+		REQUIRE_INPUT(sizeof(UINT64));
 		REQUIRE_OUTPUT(sizeof(QWORD));
 		break;
 
@@ -2628,30 +2628,43 @@ NTSTATUS DispatchIoctl(IN PDEVICE_OBJECT DeviceObject, IN PIRP Irp)
 		case IOCTL_CE_GET_PEB:
 		{
 			KAPC_STATE oldstate;
-			PEPROCESS ep = *(PEPROCESS *)Irp->AssociatedIrp.SystemBuffer;
+			UINT64 processid = *(UINT64 *)Irp->AssociatedIrp.SystemBuffer;
+			PEPROCESS ep = NULL;
 
+			*(QWORD *)Irp->AssociatedIrp.SystemBuffer = 0;
+			ntStatus = PsLookupProcessByProcessId((HANDLE)(UINT_PTR)processid, &ep);
+			if (!NT_SUCCESS(ntStatus))
+				break;
 
 			//DbgPrint("IOCTL_CE_GET_PEB");
-			KeStackAttachProcess((PKPROCESS)ep, &oldstate);
 			__try
 			{
-				ULONG r;
-				PROCESS_BASIC_INFORMATION pbi;
-				//DbgPrint("Calling ZwQueryInformationProcess");
-				ntStatus = ZwQueryInformationProcess(ZwCurrentProcess(), ProcessBasicInformation, &pbi, sizeof(pbi), &r);
-				if (ntStatus==STATUS_SUCCESS)
+				KeStackAttachProcess((PKPROCESS)ep, &oldstate);
+				__try
 				{
-					//DbgPrint("pbi.UniqueProcessId=%x\n", (int)pbi.UniqueProcessId);
-					//DbgPrint("pbi.PebBaseAddress=%p\n", (PVOID)pbi.PebBaseAddress);					
-					*(QWORD *)Irp->AssociatedIrp.SystemBuffer = (QWORD)(pbi.PebBaseAddress);
+					ULONG r;
+					PROCESS_BASIC_INFORMATION pbi;
+					//DbgPrint("Calling ZwQueryInformationProcess");
+					ntStatus = ZwQueryInformationProcess(ZwCurrentProcess(), ProcessBasicInformation, &pbi, sizeof(pbi), &r);
+					if (ntStatus==STATUS_SUCCESS)
+					{
+						//DbgPrint("pbi.UniqueProcessId=%x\n", (int)pbi.UniqueProcessId);
+						//DbgPrint("pbi.PebBaseAddress=%p\n", (PVOID)pbi.PebBaseAddress);
+						*(QWORD *)Irp->AssociatedIrp.SystemBuffer = (QWORD)(pbi.PebBaseAddress);
+					}
+					else
+						DbgPrint("ZwQueryInformationProcess failed");
 				}
-				else
-					DbgPrint("ZwQueryInformationProcess failed");
+				__finally
+				{
+					KeUnstackDetachProcess(&oldstate);
+				}
 			}
-			__finally
+			__except (1)
 			{
-				KeUnstackDetachProcess(&oldstate);
-			}	
+				ntStatus = STATUS_UNSUCCESSFUL;
+			}
+			ObDereferenceObject(ep);
 
 			
 			break;

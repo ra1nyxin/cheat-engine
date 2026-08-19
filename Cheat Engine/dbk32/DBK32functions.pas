@@ -382,7 +382,7 @@ function ultimap2_getTraceSize: UINT64;
 procedure ultimap2_resetTraceSize;
 
 function dbk_enabledrm(preferedAltitude: word=0; protectedEProcess: qword=0): boolean;
-function dbk_getPEB(EProcess: qword): QWORD;
+function dbk_getPEB(ProcessID: qword): QWORD;
 
 {
 const IOCTL_CE_ULTIMAP2_WAITFORDATA   = (IOCTL_UNKNOWN_BASE shl 16) or ($0851 shl 2) or (METHOD_BUFFERED ) or (FILE_RW_ACCESS shl 14);
@@ -685,13 +685,13 @@ begin
   result:=deviceiocontrol(hdevice,IOCTL_CE_ENABLE_DRM,@inp,sizeof(inp),nil,0,br,nil);
 end;
 
-function dbk_getPEB(EProcess: qword): QWORD;
+function dbk_getPEB(ProcessID: qword): QWORD;
 var
   br: dword;
   r: qword;
 begin
   r:=0;
-  if deviceiocontrol(hdevice,IOCTL_CE_GET_PEB,@EProcess,sizeof(EProcess),@r,sizeof(r),br,nil) then
+  if deviceiocontrol(hdevice,IOCTL_CE_GET_PEB,@ProcessID,sizeof(ProcessID),@r,sizeof(r),br,nil) then
     result:=r
   else
     result:=0;

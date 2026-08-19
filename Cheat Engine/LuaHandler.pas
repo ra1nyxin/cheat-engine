@@ -14118,7 +14118,7 @@ begin
 
  {$IFDEF windows}
  if DBKLoaded then
-    peb:=dbk_getPEB(GetPEProcess(processid))
+    peb:=dbk_getPEB(processid)
   else
   begin
     if NtQueryInformationProcess(processhandle, ProcessBasicInformation, @pbi, sizeof(pbi), @x)=STATUS_SUCCESS then
