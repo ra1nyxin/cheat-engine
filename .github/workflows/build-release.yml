@@ -160,6 +160,7 @@ jobs:
             "/p:WindowsTargetPlatformVersion=$env:WDK_VERSION",
             "/p:WDKBuildFolder=$env:WDK_BUILD_VERSION",
             '/p:SignMode=Off',
+            '/p:SkipPackageVerification=true',
             '/p:PostBuildEventUseInBuild=false'
           )
 
