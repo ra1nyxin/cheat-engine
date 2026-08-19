@@ -2710,7 +2710,7 @@ begin
       if currentEntry>Pointerscanresults.count then exit;
 
 
-      while evaluated < self.EntriesToCheck do
+      while (evaluated < self.EntriesToCheck) and (not terminated) do
       begin
         p:=Pointerscanresults.getPointer(currentEntry);
 
@@ -2988,7 +2988,7 @@ var
 
   blocksize: qword;
 
-  threadhandles: array of TThreadID;
+  workerstarted: array of boolean;
   result: tfilestream;
 
 
@@ -3063,11 +3063,20 @@ begin
     rescanworkercount:=GetCPUCount;
     if HasHyperthreading then rescanworkercount:=ceil((rescanworkercount / 2)+(rescanworkercount / 4));
 
-    blocksize:=TotalPointersToEvaluate div rescanworkercount;
-    if blocksize<8 then blocksize:=8;
+    if TotalPointersToEvaluate<qword(rescanworkercount) then
+      rescanworkercount:=integer(TotalPointersToEvaluate);
 
+    if rescanworkercount>0 then
+    begin
+      blocksize:=TotalPointersToEvaluate div rescanworkercount;
+      if (TotalPointersToEvaluate mod rescanworkercount)<>0 then
+        inc(blocksize);
+    end
+    else
+      blocksize:=0;
+
+    setlength(workerstarted, rescanworkercount);
     setlength(rescanworkers, rescanworkercount);
-    setlength(threadhandles, rescanworkercount);
     for i:=0 to rescanworkercount-1 do
     begin
       rescanworkers[i]:=TRescanWorker.Create(true);
@@ -3114,39 +3123,26 @@ begin
       rescanworkers[i].offsetBase:=offsetBase;
 
 
-      threadhandles[i]:=rescanworkers[i].Handle;
       rescanworkers[i].start;
+      workerstarted[i]:=true;
     end;
 
-
-
-    {$ifdef windows}
-    while WaitForMultipleObjects(rescanworkercount, @threadhandles[0], true, 250) = WAIT_TIMEOUT do      //wait
+    if rescanworkercount>0 then
     begin
-      //query all threads the number of pointers they have evaluated
-      PointersEvaluated:=0;
-      for i:=0 to rescanworkercount-1 do
-        inc(PointersEvaluated,rescanworkers[i].evaluated);
+      repeat
+        alldone:=true;
+        PointersEvaluated:=0;
+        for i:=0 to rescanworkercount-1 do
+        begin
+          inc(PointersEvaluated,rescanworkers[i].evaluated);
+          if not rescanworkers[i].Finished then
+            alldone:=false;
+        end;
 
-      progressbar.Position:=PointersEvaluated div (TotalPointersToEvaluate div 100);
+        progressbar.Position:=min(100, trunc((PointersEvaluated / TotalPointersToEvaluate)*100));
+        if not alldone then sleep(250);
+      until alldone;
     end;
-    {$else}
-    repeat
-      alldone:=true;
-      PointersEvaluated:=0;
-      for i:=0 to rescanworkercount-1 do
-      begin
-        inc(PointersEvaluated,rescanworkers[i].evaluated);
-        if rescanworkers[i].Finished=false then
-          alldone:=false;
-      end;
-
-      progressbar.Position:=PointersEvaluated div (TotalPointersToEvaluate div 100);
-      if not alldone then sleep(250);
-
-    until alldone;
-
-    {$endif}
 
     //no timeout, so finished or crashed
 
@@ -3197,6 +3193,23 @@ begin
     setlength(rescanworkers,0);
 
   finally
+    for i:=0 to length(rescanworkers)-1 do
+      if (rescanworkers[i]<>nil) and workerstarted[i] and (not rescanworkers[i].Finished) then
+        rescanworkers[i].Terminate;
+
+    for i:=0 to length(rescanworkers)-1 do
+      if rescanworkers[i]<>nil then
+      begin
+        if not workerstarted[i] then
+        begin
+          rescanworkers[i].Terminate;
+          rescanworkers[i].Start;
+        end;
+
+        rescanworkers[i].WaitFor;
+        freeandnil(rescanworkers[i]);
+      end;
+
     if rescanhelper<>nil then
       freeandnil(rescanhelper);
 
