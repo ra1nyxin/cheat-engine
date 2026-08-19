@@ -858,9 +858,13 @@ begin
     if files[i].f<>0 then
     begin
       if files[i].fm<>0 then
+      begin
         closehandle(files[i].fm);
+        files[i].fm:=0;
+      end;
 
       closehandle(files[i].f);
+      files[i].f:=0;
     end;
 end;
 
