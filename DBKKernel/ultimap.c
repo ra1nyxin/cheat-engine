@@ -48,6 +48,7 @@ PVOID *DataReadyPointerList;
 volatile LONG UltimapWaiterCount;
 KEVENT UltimapWaitersDrained;
 BOOL UltimapStopping = TRUE;
+BOOLEAN UltimapHookRegistered = FALSE;
 
 int perfmon_interrupt_centry(void);
 
@@ -470,27 +471,90 @@ void ultimap_resume(void)
 
 VOID ultimap_disable_dpc(IN struct _KDPC *Dpc, IN PVOID DeferredContext, IN PVOID SystemArgumen1, IN PVOID SystemArgument2)
 {
-	int i;
 	//DbgPrint("ultimap_disable_dpc()\n");
 
 	if (vmxusable)
-	{
-		i=vmx_ultimap_disable();	
+		vmx_ultimap_disable();
 
-		if (DS_AREA[cpunr()])
-		{
-			ExFreePool(DS_AREA[cpunr()]);
-			DS_AREA[cpunr()]=NULL;
-		}
+	if (DS_AREA[cpunr()])
+	{
+		ExFreePool(DS_AREA[cpunr()]);
+		DS_AREA[cpunr()]=NULL;
 	}
+}
+
+void ultimap_disable_passive(UINT_PTR param)
+{
+	int currentCpu = cpunr();
+
+	if (vmxusable)
+		vmx_ultimap_disable();
+
+	if ((currentCpu >= 0) && (currentCpu < 256) && DS_AREA[currentCpu])
+	{
+		ExFreePool(DS_AREA[currentCpu]);
+		DS_AREA[currentCpu] = NULL;
+	}
+}
+
+static void ultimap_unregister_hook(void)
+{
+	void *clear = NULL;
+
+	if (UltimapHookRegistered)
+	{
+		NTSTATUS status = HalSetSystemInformation(HalProfileSourceInterruptHandler, sizeof(PVOID*), &clear);
+		if (NT_SUCCESS(status))
+			UltimapHookRegistered = FALSE;
+		else
+			DbgPrint("Failed to unregister Ultimap PMI hook: %x\n", status);
+	}
+}
+
+static void ultimap_rollback_setup(BOOLEAN processorsConfigured)
+{
+	int i;
+
+	UltimapStopping = TRUE;
+	if (processorsConfigured)
+		forEachCpuPassive(ultimap_disable_passive, 0);
+
+	ultimap_unregister_hook();
+
+	if (FileHandle)
+	{
+		ZwClose(FileHandle);
+		FileHandle = NULL;
+	}
+
+	if (DataBlock)
+	{
+		for (i = 0; i < MaxDataBlocks; i++)
+		{
+			if (DataBlock[i].Data)
+			{
+				ExFreePool(DataBlock[i].Data);
+				DataBlock[i].Data = NULL;
+			}
+		}
+		ExFreePool(DataBlock);
+		DataBlock = NULL;
+	}
+
+	if (DataReadyPointerList)
+	{
+		ExFreePool(DataReadyPointerList);
+		DataReadyPointerList = NULL;
+	}
+
+	SaveToFile = FALSE;
+	MaxDataBlocks = 1;
 }
 
 
 
 void ultimap_disable(void)
 {
-	void *clear = NULL;
-
 	if (DataBlock)
 	{
 		int i;
@@ -530,7 +594,7 @@ void ultimap_disable(void)
 		}
 		ExReleaseFastMutex(&DataBlockMutex);
 
-	    HalSetSystemInformation(HalProfileSourceInterruptHandler, sizeof(PVOID*), &clear); //unhook the perfmon interrupt
+		ultimap_unregister_hook();
 
 
 	}
@@ -548,48 +612,53 @@ Call this for each processor
 		UINT64 cr3;
 		UINT64 dbgctl_msr;
 		int DS_AREA_SIZE;
+		volatile LONG SetupFailed;
 	} *params;
+	int currentCpu;
 
 	params=DeferredContext;
+	currentCpu = cpunr();
 
 	DS_AREA_SIZE=params->DS_AREA_SIZE;
-	if (DS_AREA_SIZE == 0)
+	if ((DS_AREA_SIZE == 0) || (currentCpu < 0) || (currentCpu >= 256))
 	{
-		DbgPrint("DS_AREA_SIZE==0\n");
+		DbgPrint("Invalid Ultimap CPU or DS area size\n");
+		InterlockedExchange(&params->SetupFailed, 1);
 		return;
 	}
 	
 
 	DbgPrint("ultimap(%I64x, %I64x, %d)", (UINT64)params->cr3, (UINT64)params->dbgctl_msr, params->DS_AREA_SIZE);
-	DS_AREA[cpunr()]=NULL;
+	DS_AREA[currentCpu]=NULL;
 
 	if (params->DS_AREA_SIZE)
 	{
-		DS_AREA[cpunr()]=ExAllocatePool(NonPagedPool, params->DS_AREA_SIZE);
+		DS_AREA[currentCpu]=ExAllocatePool(NonPagedPool, params->DS_AREA_SIZE);
 
-		if (DS_AREA[cpunr()] == NULL)
+		if (DS_AREA[currentCpu] == NULL)
 		{
 			DbgPrint("ExAllocatePool failed\n");
+			InterlockedExchange(&params->SetupFailed, 1);
 			return;
 		}
 
-		RtlZeroMemory(DS_AREA[cpunr()],  params->DS_AREA_SIZE);
+		RtlZeroMemory(DS_AREA[currentCpu],  params->DS_AREA_SIZE);
 
-		DbgPrint("DS_AREA[%d]=%p", cpunr(), DS_AREA[cpunr()]);
+		DbgPrint("DS_AREA[%d]=%p", currentCpu, DS_AREA[currentCpu]);
 
 		//Initialize the DS_AREA 
 
-		DS_AREA[cpunr()]->BTS_BufferBaseAddress=(QWORD)(UINT_PTR)DS_AREA[cpunr()]+sizeof(DS_AREA_MANAGEMENT);
-        DS_AREA[cpunr()]->BTS_BufferBaseAddress+=sizeof(BTS);
+		DS_AREA[currentCpu]->BTS_BufferBaseAddress=(QWORD)(UINT_PTR)DS_AREA[currentCpu]+sizeof(DS_AREA_MANAGEMENT);
+        DS_AREA[currentCpu]->BTS_BufferBaseAddress+=sizeof(BTS);
 
-        DS_AREA[cpunr()]->BTS_BufferBaseAddress-=DS_AREA[cpunr()]->BTS_BufferBaseAddress % sizeof(BTS);
+        DS_AREA[currentCpu]->BTS_BufferBaseAddress-=DS_AREA[currentCpu]->BTS_BufferBaseAddress % sizeof(BTS);
 
-        DS_AREA[cpunr()]->BTS_IndexBaseAddress=DS_AREA[cpunr()]->BTS_BufferBaseAddress;
-        DS_AREA[cpunr()]->BTS_AbsoluteMaxAddress=(QWORD)(UINT_PTR)DS_AREA[cpunr()]+params->DS_AREA_SIZE-sizeof(BTS);
-        DS_AREA[cpunr()]->BTS_AbsoluteMaxAddress-=DS_AREA[cpunr()]->BTS_AbsoluteMaxAddress % sizeof(BTS);
-        DS_AREA[cpunr()]->BTS_AbsoluteMaxAddress++;
+        DS_AREA[currentCpu]->BTS_IndexBaseAddress=DS_AREA[currentCpu]->BTS_BufferBaseAddress;
+        DS_AREA[currentCpu]->BTS_AbsoluteMaxAddress=(QWORD)(UINT_PTR)DS_AREA[currentCpu]+params->DS_AREA_SIZE-sizeof(BTS);
+        DS_AREA[currentCpu]->BTS_AbsoluteMaxAddress-=DS_AREA[currentCpu]->BTS_AbsoluteMaxAddress % sizeof(BTS);
+        DS_AREA[currentCpu]->BTS_AbsoluteMaxAddress++;
 
-        DS_AREA[cpunr()]->BTS_InterruptThresholdAddress=(DS_AREA[cpunr()]->BTS_AbsoluteMaxAddress-1) - 4*sizeof(BTS);
+		DS_AREA[currentCpu]->BTS_InterruptThresholdAddress=(DS_AREA[currentCpu]->BTS_AbsoluteMaxAddress-1) - 4*sizeof(BTS);
 	}
 	
 
@@ -621,11 +690,12 @@ Call this for each processor
 	//and finally activate the mapping
 	if (vmxusable)
 	{
-		vmx_ultimap((UINT_PTR)params->cr3, params->dbgctl_msr, DS_AREA[cpunr()]);
+		vmx_ultimap((UINT_PTR)params->cr3, params->dbgctl_msr, DS_AREA[currentCpu]);
 	}
 	else
 	{
 		DbgPrint("vmxusable is false. So no ultimap for you!!!\n");
+		InterlockedExchange(&params->SetupFailed, 1);
 	}
 }
 
@@ -704,102 +774,100 @@ NTSTATUS ultimap(UINT64 cr3, UINT64 dbgctl_msr, int _DS_AREA_SIZE, BOOL savetofi
 		UINT64 cr3;
 		UINT64 dbgctl_msr;
 		int DS_AREA_SIZE;
+		volatile LONG SetupFailed;
 	} params;
+	NTSTATUS status = STATUS_UNSUCCESSFUL;
+	BOOLEAN processorsConfigured = FALSE;
 	int i;
 
-	if ((handlerCount <= 0) || (handlerCount > 64))
-		return STATUS_UNSUCCESSFUL;
+	if ((handlerCount <= 0) || (handlerCount > 64) ||
+		(_DS_AREA_SIZE < (int)(sizeof(DS_AREA_MANAGEMENT) + 6 * sizeof(BTS))) ||
+		(savetofile && (filename == NULL)))
+		return STATUS_INVALID_PARAMETER;
 
+	if (DataBlock || DataReadyPointerList || FileHandle || UltimapHookRegistered || !UltimapStopping)
+		return STATUS_DEVICE_BUSY;
 
+	for (i = 0; i < 256; i++)
+	{
+		if (DS_AREA[i])
+			return STATUS_DEVICE_BUSY;
+	}
 
-	//create file
-	SaveToFile=savetofile;
+	MaxDataBlocks = handlerCount;
+	KeInitializeSemaphore(&DataBlockSemaphore, MaxDataBlocks, MaxDataBlocks);
+	ExInitializeFastMutex(&DataBlockMutex);
+	KeInitializeEvent(&UltimapWaitersDrained, NotificationEvent, TRUE);
+	UltimapWaiterCount = 0;
+	UltimapStopping = TRUE;
+	FileHandle = NULL;
+	SaveToFile = savetofile;
 
 	if (SaveToFile)
 	{
-		UNICODE_STRING usFile;	
+		UNICODE_STRING usFile;
 		OBJECT_ATTRIBUTES oaFile;
 		IO_STATUS_BLOCK iosb;
-		NTSTATUS r;
 
 		RtlInitUnicodeString(&usFile, filename);
 		InitializeObjectAttributes(&oaFile,&usFile, OBJ_CASE_INSENSITIVE | OBJ_KERNEL_HANDLE, NULL,NULL);
 
 		DbgPrint("Creating file %S", usFile.Buffer);
 
-		FileHandle=0;
-		r=ZwCreateFile(&FileHandle,SYNCHRONIZE|FILE_READ_DATA|FILE_APPEND_DATA | GENERIC_ALL,&oaFile,&iosb,0,FILE_ATTRIBUTE_NORMAL,0,FILE_SUPERSEDE, FILE_SEQUENTIAL_ONLY | FILE_SYNCHRONOUS_IO_NONALERT,NULL,0);
-		DbgPrint("ZwCreateFile=%x\n", r);
-
-
+		status=ZwCreateFile(&FileHandle,SYNCHRONIZE|FILE_READ_DATA|FILE_APPEND_DATA | GENERIC_ALL,&oaFile,&iosb,0,FILE_ATTRIBUTE_NORMAL,0,FILE_SUPERSEDE, FILE_SEQUENTIAL_ONLY | FILE_SYNCHRONOUS_IO_NONALERT,NULL,0);
+		DbgPrint("ZwCreateFile=%x\n", status);
+		if (!NT_SUCCESS(status))
+			goto setupFailed;
 	}
-
-	MaxDataBlocks=handlerCount;
-	KeInitializeSemaphore(&DataBlockSemaphore, MaxDataBlocks, MaxDataBlocks);
-	ExInitializeFastMutex(&DataBlockMutex);
-	KeInitializeEvent(&UltimapWaitersDrained, NotificationEvent, TRUE);
-	UltimapWaiterCount = 0;
 
 	//Datablock inits
-
 	DataBlock=ExAllocatePool(NonPagedPool, sizeof(_DataBlock) * MaxDataBlocks);
 	DataReadyPointerList=ExAllocatePool(NonPagedPool, sizeof(PVOID) * MaxDataBlocks);
-
-
-	if ((DataBlock) && (DataReadyPointerList))
-	{
-		NTSTATUS r;
-		UltimapStopping = FALSE;
+	if (DataBlock)
 		RtlZeroMemory(DataBlock, sizeof(_DataBlock) * MaxDataBlocks);
+	if (DataReadyPointerList)
 		RtlZeroMemory(DataReadyPointerList, sizeof(PVOID) * MaxDataBlocks);
 
-
-		for (i=0; i< MaxDataBlocks; i++)
-		{
-			//DataBlock[i]->
-			DataBlock[i].Data=NULL;
-
-			KeInitializeEvent(&DataBlock[i].DataReady, SynchronizationEvent , FALSE);
-
-			DataBlock[i].Available=TRUE;
-
-			DataReadyPointerList[i]=&DataBlock[i].DataReady;
-		}
-
-
-		params.cr3=cr3;
-		params.dbgctl_msr=dbgctl_msr;
-		params.DS_AREA_SIZE=_DS_AREA_SIZE;
-
-		r=HalSetSystemInformation(HalProfileSourceInterruptHandler, sizeof(PVOID*), &pperfmon_hook); //hook the perfmon interrupt
-
-		DbgPrint("HalSetSystemInformation returned %x\n", r);
-
-		if (!forEachCpu(ultimap_setup_dpc, &params, NULL, NULL, NULL))
-			return STATUS_INSUFFICIENT_RESOURCES;
-		return STATUS_SUCCESS;
-	}
-	else
+	if ((DataBlock == NULL) || (DataReadyPointerList == NULL))
 	{
-		DbgPrint("Failure allocating DataBlock and DataReadyPointerList\n");
-		if (DataBlock)
-		{
-			ExFreePool(DataBlock);
-			DataBlock = NULL;
-		}
-		if (DataReadyPointerList)
-		{
-			ExFreePool(DataReadyPointerList);
-			DataReadyPointerList = NULL;
-		}
-		if (FileHandle)
-		{
-			ZwClose(FileHandle);
-			FileHandle = NULL;
-		}
-		UltimapStopping = TRUE;
-		return STATUS_MEMORY_NOT_ALLOCATED;
+		status = STATUS_INSUFFICIENT_RESOURCES;
+		goto setupFailed;
 	}
 
-	
+	for (i=0; i< MaxDataBlocks; i++)
+	{
+		KeInitializeEvent(&DataBlock[i].DataReady, SynchronizationEvent , FALSE);
+		DataBlock[i].Available=TRUE;
+		DataReadyPointerList[i]=&DataBlock[i].DataReady;
+	}
+
+	params.cr3=cr3;
+	params.dbgctl_msr=dbgctl_msr;
+	params.DS_AREA_SIZE=_DS_AREA_SIZE;
+	params.SetupFailed = 0;
+
+	status=HalSetSystemInformation(HalProfileSourceInterruptHandler, sizeof(PVOID*), &pperfmon_hook); //hook the perfmon interrupt
+	DbgPrint("HalSetSystemInformation returned %x\n", status);
+	if (!NT_SUCCESS(status))
+		goto setupFailed;
+	UltimapHookRegistered = TRUE;
+
+	if (!forEachCpu(ultimap_setup_dpc, &params, NULL, NULL, NULL))
+	{
+		status = STATUS_INSUFFICIENT_RESOURCES;
+		goto setupFailed;
+	}
+	processorsConfigured = TRUE;
+	if (params.SetupFailed)
+	{
+		status = STATUS_INSUFFICIENT_RESOURCES;
+		goto setupFailed;
+	}
+
+	UltimapStopping = FALSE;
+	return STATUS_SUCCESS;
+
+setupFailed:
+	ultimap_rollback_setup(processorsConfigured);
+	return status;
 }
