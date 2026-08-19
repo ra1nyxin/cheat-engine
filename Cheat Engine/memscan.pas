@@ -4422,10 +4422,11 @@ begin
 
           lastaddress:=alist[k].address;
 
-          while (alist[k].address=lastaddress) and (k<=j) do //nugfix might cause performance loss, check it later
+          while (k<=j) and (alist[k].address=lastaddress) do //nugfix might cause performance loss, check it later
           begin
             //add bits to the scanned bitlist
-            scannedbitlist[alist[k].bit]:=true;
+            if alist[k].bit<=high(scannedbitlist) then
+              scannedbitlist[alist[k].bit]:=true;
             inc(k);
           end;
           dec(k);
