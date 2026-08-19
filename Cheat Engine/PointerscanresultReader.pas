@@ -453,6 +453,13 @@ begin
     compressedPointerScanResult.offsetcount:=(pdword(@compressedTempBuffer[bit shr 3])^ shr (bit and $7)) and MaskLevel;
     inc(compressedPointerScanResult.offsetcount, length(fEndsWithOffsetList));
 
+    if compressedPointerScanResult.offsetcount>maxlevel then
+      exit;
+
+    if (compressedPointerScanResult.modulenr<-1) or
+       (compressedPointerScanResult.modulenr>=modulelist.count) then
+      exit;
+
     inc(bit, fMaxBitCountLevel);
 
     for j:=0 to length(fEndsWithOffsetList)-1 do
@@ -487,6 +494,13 @@ begin
   else
   begin
     result:=PPointerscanResult(ptrUint(cache)+(cachepos*sizeofentry));
+    if (result.offsetcount<0) or (result.offsetcount>maxlevel) or
+       (result.modulenr<-1) or (result.modulenr>=modulelist.count) then
+    begin
+      result:=nil;
+      exit;
+    end;
+
     fLastRawPointer:=result;
   end;
 end;
@@ -563,19 +577,52 @@ var
   fnames: tstringlist;
 
   pscanversion: byte;
+  entrybits: qword;
+  recordcount: qword;
+  corruptResultFile: boolean;
+
+  procedure RequireConfigBytes(bytecount: qword);
+  begin
+    if (configfile.Position<0) or (configfile.Position>configfile.Size) or
+       (bytecount>qword(configfile.Size-configfile.Position)) then
+      raise exception.create(rsPSRCorruptedPointerscanFile);
+  end;
+
+  function ReadConfigByte: byte;
+  begin
+    RequireConfigBytes(1);
+    result:=configfile.ReadByte;
+  end;
+
+  function ReadConfigDWord: dword;
+  begin
+    RequireConfigBytes(sizeof(result));
+    configfile.ReadBuffer(result,sizeof(result));
+  end;
+
+  function ReadConfigQWord: qword;
+  begin
+    RequireConfigBytes(sizeof(result));
+    configfile.ReadBuffer(result,sizeof(result));
+  end;
 
 begin
   FFilename:=filename;
   configfile:=TFileStream.Create(filename, fmOpenRead or fmShareDenyWrite);
 
-  if configfile.ReadByte<>$ce then
+  if ReadConfigByte<>$ce then
     raise exception.create(rsPSRCorruptedPointerscanFile);
 
-  pscanversion:=configfile.ReadByte;
+  pscanversion:=ReadConfigByte;
   if pscanversion>pointerscanfileversion then
     raise exception.create(rsPSRInvalidPointerscanFileVersion);
 
+  RequireConfigBytes(sizeof(modulelistlength));
   configfile.ReadBuffer(modulelistlength,sizeof(modulelistlength));
+  if (modulelistlength<0) or (modulelistlength>65536) then
+    raise exception.create(rsPSRCorruptedPointerscanFile);
+  RequireConfigBytes(qword(modulelistlength)*12);
+
   modulelist:=tstringlist.create;
   tempmodulelist:=tstringlist.create;
 
@@ -592,17 +639,22 @@ begin
   //sift through the list filling in the modulelist of the opened pointerfile
   for i:=0 to modulelistlength-1 do
   begin
-    configfile.Read(x,sizeof(x));
+    x:=ReadConfigDWord;
+    if x>32767 then
+      raise exception.create(rsPSRCorruptedPointerscanFile);
+    RequireConfigBytes(qword(x)+sizeof(qword));
+
     while x>=temppcharmaxlength do
     begin
       temppcharmaxlength:=temppcharmaxlength*2;
       ReallocMem(temppchar, temppcharmaxlength);
     end;
 
-    configfile.Read(temppchar[0], x);
+    if x>0 then
+      configfile.ReadBuffer(temppchar[0], x);
     temppchar[x]:=#0;
 
-    a:=configfile.ReadQWord;  //discard this info (only used for scandata)
+    a:=ReadConfigQWord;  //discard this info (only used for scandata)
 
     if original=nil then
     begin
@@ -622,25 +674,45 @@ begin
   end;
 
   //read maxlevel
-  configfile.Read(maxlevel,sizeof(maxlevel));
+  RequireConfigBytes(sizeof(maxlevel));
+  configfile.ReadBuffer(maxlevel,sizeof(maxlevel));
+  if (maxlevel<0) or (maxlevel>1001) then
+    raise exception.create(rsPSRCorruptedPointerscanFile);
 
 
 
   //read compressedptr info
-  fCompressedPtr:=configfile.ReadByte=1;
+  x:=ReadConfigByte;
+  if x>1 then
+    raise exception.create(rsPSRCorruptedPointerscanFile);
+  fCompressedPtr:=x=1;
   if fCompressedPtr then
   begin
-    fAligned:=configFile.ReadByte=1;
-    fMaxBitCountModuleIndex:=configfile.ReadByte;
-    fMaxBitCountModuleOffset:=configfile.ReadByte;
-    fMaxBitCountLevel:=configfile.ReadByte;
-    fMaxBitCountOffset:=configfile.ReadByte;
-    setlength(fEndsWithOffsetList, configfile.ReadByte);
-    for i:=0 to length(fEndsWithOffsetList)-1 do
-      fEndsWithOffsetList[i]:=configfile.ReadDWord;
+    x:=ReadConfigByte;
+    if x>1 then
+      raise exception.create(rsPSRCorruptedPointerscanFile);
+    fAligned:=x=1;
+    fMaxBitCountModuleIndex:=ReadConfigByte;
+    fMaxBitCountModuleOffset:=ReadConfigByte;
+    fMaxBitCountLevel:=ReadConfigByte;
+    fMaxBitCountOffset:=ReadConfigByte;
 
-    sizeofentry:=MaxBitCountModuleOffset+MaxBitCountModuleIndex+MaxBitCountLevel+MaxBitCountOffset*(maxlevel-length(fEndsWithOffsetList));
-    sizeofentry:=(sizeofentry+7) div 8;
+    if (fMaxBitCountModuleIndex<1) or (fMaxBitCountModuleIndex>32) or
+       ((fMaxBitCountModuleOffset<>32) and (fMaxBitCountModuleOffset<>64)) or
+       (fMaxBitCountLevel>32) or
+       (fMaxBitCountOffset<1) or (fMaxBitCountOffset>32) then
+      raise exception.create(rsPSRCorruptedPointerscanFile);
+
+    setlength(fEndsWithOffsetList, ReadConfigByte);
+    if length(fEndsWithOffsetList)>maxlevel then
+      raise exception.create(rsPSRCorruptedPointerscanFile);
+    RequireConfigBytes(qword(length(fEndsWithOffsetList))*sizeof(dword));
+    for i:=0 to length(fEndsWithOffsetList)-1 do
+      fEndsWithOffsetList[i]:=ReadConfigDWord;
+
+    entrybits:=qword(MaxBitCountModuleOffset)+MaxBitCountModuleIndex+MaxBitCountLevel+
+      qword(MaxBitCountOffset)*qword(maxlevel-length(fEndsWithOffsetList));
+    sizeofentry:=integer((entrybits+7) div 8);
 
     MaskModuleIndex:=0;
     for i:=1 to MaxBitCountModuleIndex do
@@ -660,11 +732,17 @@ begin
     sizeofentry:=16+(4*maxlevel)
   end;
 
+  if sizeofentry<=0 then
+    raise exception.create(rsPSRCorruptedPointerscanFile);
+
   if pscanversion>=2 then
   begin
-    fdidBaseRangeScan:=configFile.readByte=1;
+    x:=ReadConfigByte;
+    if x>1 then
+      raise exception.create(rsPSRCorruptedPointerscanFile);
+    fdidBaseRangeScan:=x=1;
     if fdidBaseRangeScan then
-      foriginalBaseScanRange:=configfile.ReadQWord;
+      foriginalBaseScanRange:=ReadConfigQWord;
   end;
 
 
@@ -685,6 +763,7 @@ begin
 
   setlength(files, length(filenames));
   j:=0;
+  corruptResultFile:=false;
 
   for i:=0 to length(filenames)-1 do
   begin
@@ -710,7 +789,24 @@ begin
 
         if files[j].filesize>0 then
         begin
-          fcount:=fcount+uint64(files[j].filesize div uint64(sizeofentry));
+          if (files[j].filesize mod qword(sizeofentry))<>0 then
+          begin
+            closehandle(files[j].f);
+            files[j].f:=0;
+            corruptResultFile:=true;
+            continue;
+          end;
+
+          recordcount:=files[j].filesize div qword(sizeofentry);
+          if recordcount>high(qword)-fcount then
+          begin
+            closehandle(files[j].f);
+            files[j].f:=0;
+            corruptResultFile:=true;
+            continue;
+          end;
+
+          fcount:=fcount+recordcount;
           files[j].lastindex:=fcount-1;
 
           files[j].fm:=CreateFileMapping(files[j].f, nil,PAGE_READONLY, 0,0,nil);
@@ -728,6 +824,9 @@ begin
     end;
   end;
   setlength(files,j);
+
+  if corruptResultFile then
+    raise exception.create(rsPSRCorruptedPointerscanFile);
 
 
 
