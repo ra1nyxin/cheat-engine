@@ -610,8 +610,14 @@ var
   end;
 
 begin
-  FFilename:=filename;
-  configfile:=TFileStream.Create(filename, fmOpenRead or fmShareDenyWrite);
+  configfile:=nil;
+  tempmodulelist:=nil;
+  temppchar:=nil;
+  fnames:=nil;
+
+  try
+    FFilename:=filename;
+    configfile:=TFileStream.Create(filename, fmOpenRead or fmShareDenyWrite);
 
   if ReadConfigByte<>$ce then
     raise exception.create(rsPSRCorruptedPointerscanFile);
@@ -762,8 +768,6 @@ begin
   for i:=0 to fnames.count-1 do
     filenames[i]:=fnames[i];
 
-  fnames.free;
-
   setlength(files, length(filenames));
   j:=0;
   corruptResultFile:=false;
@@ -840,10 +844,20 @@ begin
 
  // getmem(cache, sizeofEntry*maxcachecount);
  // getmem(cache2, sizeofEntry*maxcachecount);
-  InitializeCache(0);
+    InitializeCache(0);
+  finally
+    if fnames<>nil then
+      fnames.free;
 
-  freememandnil(temppchar);
-  configfile.Free;
+    if temppchar<>nil then
+      freememandnil(temppchar);
+
+    if tempmodulelist<>nil then
+      tempmodulelist.free;
+
+    if configfile<>nil then
+      configfile.free;
+  end;
 
 
   fCanResume:=fileexists(filename+'.resume.config') and fileexists(filename+'.resume.scandata') and fileexists(filename+'.resume.queue');
