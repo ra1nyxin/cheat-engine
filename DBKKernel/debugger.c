@@ -458,6 +458,12 @@ int debugger_stopDebugging(void)
 	//DbgPrint("Stopping the debugger if it is running\n");
 
 	DebuggerState.stoppingTheDebugger=TRUE;	
+	DebuggerState.isDebugging=FALSE;
+	DebuggerState.handledlastevent=TRUE;
+
+	KeSetEvent(&debugger_event_WaitForContinue, 0, FALSE);
+	KeSetEvent(&debugger_event_CanBreak, 0, FALSE);
+	KeSetEvent(&debugger_event_WaitForDebugEvent, 0, FALSE);
 
 	if (DebuggerState.globalDebug)
 	{
@@ -469,8 +475,6 @@ int debugger_stopDebugging(void)
 	
 
     DebuggerState.globalDebug=FALSE; //stop when possible, saves speed
-	DebuggerState.isDebugging=FALSE;	
-
 	for (i=0; i<4; i++)
 		DebuggerState.breakpoint[i].active=FALSE;
 
@@ -519,7 +523,7 @@ NTSTATUS debugger_waitForDebugEvent(ULONG timeout)
 	else
 	  r=KeWaitForSingleObject(&debugger_event_WaitForDebugEvent, UserRequest, KernelMode, TRUE, &wait);
 
-	if (r==STATUS_SUCCESS)
+	if ((r==STATUS_SUCCESS) && DebuggerState.isDebugging && !DebuggerState.stoppingTheDebugger)
 		return r;
 	else
 		return STATUS_UNSUCCESSFUL;	
@@ -759,6 +763,12 @@ int breakpointHandler_kernel(UINT_PTR *stackpointer, UINT_PTR *currentdebugregs,
 
 			//DbgPrint("Woke up. r=%x\n",r);
 				
+		}
+
+		if (!DebuggerState.isDebugging || DebuggerState.stoppingTheDebugger)
+		{
+			KeSetEvent(&debugger_event_CanBreak, 0, FALSE);
+			return 1;
 		}
 
 		if ((stackpointer[si_cs] & 3)==0)

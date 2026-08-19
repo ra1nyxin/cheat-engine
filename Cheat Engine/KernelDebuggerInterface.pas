@@ -275,7 +275,7 @@ begin
 
   if NeedsToContinue then
   begin
-    DBKDebug_ContinueDebugEvent(false);
+    DBKDebug_ContinueDebugEvent(true);
     NeedsToContinue:=false;
   end;
 
