@@ -438,6 +438,12 @@ Call this AFTER the interrupts are hooked
 */
 {
 	//DbgPrint("debugger_startDebugging. Processid=%x\n",debuggedProcessID);
+	DebuggerState.stoppingTheDebugger=FALSE;
+	DebuggerState.handledlastevent=FALSE;
+	KeClearEvent(&debugger_event_WaitForContinue);
+	KeClearEvent(&debugger_event_WaitForDebugEvent);
+	KeSetEvent(&debugger_event_CanBreak, 0, FALSE);
+
 	Int1JumpBackLocation.eip=inthook_getOriginalEIP(1);
 	Int1JumpBackLocation.cs=inthook_getOriginalCS(1);
 
