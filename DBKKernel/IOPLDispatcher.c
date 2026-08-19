@@ -34,6 +34,255 @@ PEPROCESS DRMProcess2 = NULL;
 typedef PCHAR (*GET_PROCESS_IMAGE_NAME) (PEPROCESS Process); 
 GET_PROCESS_IMAGE_NAME PsGetProcessImageFileName; 
 
+#define CE_RW_MEMORY_HEADER_SIZE (sizeof(UINT64) * 2 + sizeof(WORD))
+#define CE_QUERY_PROCESS_HEADER_SIZE (sizeof(QWORD) * 2)
+
+static BOOLEAN BufferHasRange(ULONG bufferLength, SIZE_T offset, UINT64 length)
+{
+	return (offset <= bufferLength) && (length <= (UINT64)(bufferLength - offset));
+}
+
+static NTSTATUS ValidateIoctlBufferLengths(ULONG ioctl, PVOID buffer, ULONG inputLength, ULONG outputLength)
+{
+#define REQUIRE_INPUT(length) do { if (inputLength < (ULONG)(length)) return STATUS_BUFFER_TOO_SMALL; } while (0)
+#define REQUIRE_OUTPUT(length) do { if (outputLength < (ULONG)(length)) return STATUS_BUFFER_TOO_SMALL; } while (0)
+
+	if ((inputLength || outputLength) && (buffer == NULL))
+		return STATUS_INVALID_PARAMETER;
+
+	switch (ioctl)
+	{
+	case IOCTL_CE_READMEMORY:
+		REQUIRE_INPUT(CE_RW_MEMORY_HEADER_SIZE);
+		if (!BufferHasRange(outputLength, 0, *(WORD *)((PUCHAR)buffer + sizeof(UINT64) * 2)))
+			return STATUS_BUFFER_TOO_SMALL;
+		break;
+
+	case IOCTL_CE_WRITEMEMORY:
+		REQUIRE_INPUT(CE_RW_MEMORY_HEADER_SIZE);
+		if (!BufferHasRange(inputLength, CE_RW_MEMORY_HEADER_SIZE, *(WORD *)((PUCHAR)buffer + sizeof(UINT64) * 2)))
+			return STATUS_BUFFER_TOO_SMALL;
+		break;
+
+	case IOCTL_CE_READPHYSICALMEMORY:
+		REQUIRE_INPUT(sizeof(UINT64) * 2);
+		if (!BufferHasRange(outputLength, 0, ((PUINT64)buffer)[1]))
+			return STATUS_BUFFER_TOO_SMALL;
+		break;
+
+	case IOCTL_CE_WRITEPHYSICALMEMORY:
+		REQUIRE_INPUT(sizeof(UINT64) * 2);
+		if (!BufferHasRange(inputLength, sizeof(UINT64) * 2, ((PUINT64)buffer)[1]))
+			return STATUS_BUFFER_TOO_SMALL;
+		break;
+
+	case IOCTL_CE_OPENPROCESS:
+		REQUIRE_INPUT(sizeof(ULONG));
+		REQUIRE_OUTPUT(sizeof(UINT64) + sizeof(BYTE));
+		break;
+
+	case IOCTL_CE_OPENTHREAD:
+	case IOCTL_CE_GETPETHREAD:
+	case IOCTL_CE_GETPEPROCESS:
+	case IOCTL_CE_GETCR3:
+		REQUIRE_INPUT(sizeof(ULONG));
+		REQUIRE_OUTPUT(sizeof(UINT64));
+		break;
+
+	case IOCTL_CE_QUERY_VIRTUAL_MEMORY:
+		REQUIRE_INPUT(sizeof(UINT64) * 2);
+		REQUIRE_OUTPUT(sizeof(UINT64) + sizeof(DWORD));
+		break;
+
+	case IOCTL_CE_GETPHYSICALADDRESS:
+		REQUIRE_INPUT(sizeof(UINT64) * 2);
+		REQUIRE_OUTPUT(sizeof(UINT64));
+		break;
+
+	case IOCTL_CE_GETMEMORYRANGES:
+		REQUIRE_OUTPUT(sizeof(UINT64) * 2);
+		break;
+
+	case IOCTL_CE_GETCR0:
+	case IOCTL_CE_GETCR4:
+	case IOCTL_CE_GETPROCADDRESS:
+	case IOCTL_CE_GETPROCESSNAMEADDRESS:
+	case IOCTL_CE_ULTIMAP2_GETTRACESIZE:
+		if ((ioctl == IOCTL_CE_GETPROCADDRESS) || (ioctl == IOCTL_CE_GETPROCESSNAMEADDRESS))
+			REQUIRE_INPUT(sizeof(UINT64));
+		REQUIRE_OUTPUT(sizeof(UINT64));
+		break;
+
+	case IOCTL_CE_SETCR4:
+	case IOCTL_CE_SETGLOBALDEBUGSTATE:
+	case IOCTL_CE_DEBUGPROCESS:
+	case IOCTL_CE_SUSPENDTHREAD:
+	case IOCTL_CE_RESUMETHREAD:
+	case IOCTL_CE_SUSPENDPROCESS:
+	case IOCTL_CE_RESUMEPROCESS:
+	case IOCTL_CE_CONTINUEDEBUGEVENT:
+	case IOCTL_CE_WAITFORDEBUGEVENT:
+	case IOCTL_CE_SETKERNELSTEPABILITY:
+	case IOCTL_CE_SETSTORELBR:
+	case IOCTL_CE_ULTIMAP2_LOCKFILE:
+	case IOCTL_CE_ULTIMAP2_RELEASEFILE:
+	case IOCTL_CE_ULTIMAP2_CONTINUE:
+		REQUIRE_INPUT(sizeof(ULONG));
+		break;
+
+	case IOCTL_CE_GETIDT:
+		REQUIRE_OUTPUT(max(sizeof(IDT), 2 + sizeof(UINT64)));
+		break;
+
+	case IOCTL_CE_GETGDT:
+		REQUIRE_OUTPUT(max(sizeof(GDT), 2 + sizeof(UINT64)));
+		break;
+
+	case IOCTL_CE_LAUNCHDBVM:
+		REQUIRE_INPUT(sizeof(UINT64) + sizeof(DWORD32));
+		break;
+
+	case IOCTL_CE_USERDEFINEDINTERRUPTHOOK:
+		REQUIRE_INPUT(sizeof(UINT64) * 4);
+		break;
+
+	case IOCTL_CE_STARTPROCESSWATCH:
+	case IOCTL_CE_WRITESIGNOREWP:
+		REQUIRE_INPUT(sizeof(BYTE));
+		break;
+
+	case IOCTL_CE_CREATEAPC:
+	case IOCTL_CE_EXECUTE_CODE:
+	case IOCTL_CE_WRITEMSR:
+	case IOCTL_CE_ENABLE_DRM:
+		REQUIRE_INPUT(sizeof(UINT64) * 2);
+		break;
+
+	case IOCTL_CE_ALLOCATEMEM:
+		REQUIRE_INPUT(sizeof(UINT64) * 5);
+		REQUIRE_OUTPUT(sizeof(UINT64));
+		break;
+
+	case IOCTL_CE_ALLOCATEMEM_NONPAGED:
+		REQUIRE_INPUT(sizeof(ULONG));
+		REQUIRE_OUTPUT(sizeof(UINT64));
+		break;
+
+	case IOCTL_CE_FREE_NONPAGED:
+	case IOCTL_CE_UNLOCK_MEMORY:
+	case IOCTL_CE_STARTACCESMONITOR:
+	case IOCTL_CE_ALLOCATE_MEMORY_FOR_DBVM:
+		REQUIRE_INPUT(sizeof(UINT64));
+		break;
+
+	case IOCTL_CE_MAP_MEMORY:
+		REQUIRE_INPUT(sizeof(UINT64) * 3 + sizeof(DWORD));
+		REQUIRE_OUTPUT(sizeof(UINT64) * 2);
+		break;
+
+	case IOCTL_CE_UNMAP_MEMORY:
+		REQUIRE_INPUT(sizeof(UINT64) * 2);
+		break;
+
+	case IOCTL_CE_LOCK_MEMORY:
+		REQUIRE_INPUT(sizeof(UINT64) * 3);
+		REQUIRE_OUTPUT(sizeof(UINT64));
+		break;
+
+	case IOCTL_CE_GETDEBUGGERSTATE:
+		REQUIRE_OUTPUT(sizeof(DebugStackState));
+		break;
+
+	case IOCTL_CE_SETDEBUGGERSTATE:
+		REQUIRE_INPUT(sizeof(DebugStackState));
+		break;
+
+	case IOCTL_CE_GD_SETBREAKPOINT:
+		REQUIRE_INPUT(sizeof(BOOL) + sizeof(int) + sizeof(UINT64) + sizeof(DWORD) * 2);
+		break;
+
+	case IOCTL_CE_GETVERSION:
+		REQUIRE_OUTPUT(sizeof(ULONG));
+		break;
+
+	case IOCTL_CE_READMSR:
+		REQUIRE_INPUT(sizeof(DWORD));
+		REQUIRE_OUTPUT(sizeof(UINT64));
+		break;
+
+	case IOCTL_CE_ULTIMAP2:
+		REQUIRE_INPUT(sizeof(UINT32) * 6 + sizeof(URANGE) * 8 + sizeof(WCHAR) * 200);
+		break;
+
+	case IOCTL_CE_ULTIMAP2_WAITFORDATA:
+		REQUIRE_INPUT(sizeof(ULONG));
+		REQUIRE_OUTPUT(sizeof(ULTIMAP2DATAEVENT));
+		break;
+
+	case IOCTL_CE_ULTIMAP:
+		REQUIRE_INPUT(sizeof(UINT64) * 3 + sizeof(BOOL) + sizeof(int) + sizeof(WCHAR) * 200);
+		break;
+
+	case IOCTL_CE_ULTIMAP_WAITFORDATA:
+		REQUIRE_INPUT(sizeof(ULONG));
+		REQUIRE_OUTPUT(sizeof(ULTIMAPDATAEVENT));
+		break;
+
+	case IOCTL_CE_ULTIMAP_CONTINUE:
+		REQUIRE_INPUT(sizeof(ULTIMAPDATAEVENT));
+		break;
+
+	case IOCTL_CE_ENUMACCESSEDMEMORY:
+		REQUIRE_INPUT(sizeof(UINT64));
+		REQUIRE_OUTPUT(sizeof(int));
+		break;
+
+	case IOCTL_CE_GETACCESSEDMEMORYLIST:
+		REQUIRE_INPUT(sizeof(int));
+		if (*(int *)buffer < 0)
+			return STATUS_INVALID_PARAMETER;
+		if (!BufferHasRange(outputLength, 0, *(int *)buffer))
+			return STATUS_BUFFER_TOO_SMALL;
+		break;
+
+	case IOCTL_CE_INITIALIZE:
+		REQUIRE_INPUT(sizeof(UINT64) * 11);
+		REQUIRE_OUTPUT(sizeof(UINT_PTR));
+		break;
+
+	case IOCTL_CE_VMXCONFIG:
+		REQUIRE_INPUT(sizeof(ULONG) * 2 + sizeof(QWORD) * 2);
+		break;
+
+	case IOCTL_CE_GET_PEB:
+		REQUIRE_INPUT(sizeof(PEPROCESS));
+		REQUIRE_OUTPUT(sizeof(QWORD));
+		break;
+
+	case IOCTL_CE_QUERYINFORMATIONPROCESS:
+		REQUIRE_INPUT(sizeof(QWORD) * 4);
+		REQUIRE_OUTPUT(CE_QUERY_PROCESS_HEADER_SIZE);
+		if (((PUINT64)buffer)[3] > MAXULONG)
+			return STATUS_INVALID_PARAMETER;
+		if (((PUINT64)buffer)[1] && !BufferHasRange(outputLength, CE_QUERY_PROCESS_HEADER_SIZE, ((PUINT64)buffer)[3]))
+			return STATUS_BUFFER_TOO_SMALL;
+		break;
+
+#ifndef AMD64
+	case IOCTL_CE_MAKEWRITABLE:
+		REQUIRE_INPUT(sizeof(UINT64) + sizeof(ULONG) + sizeof(BYTE));
+		break;
+#endif
+
+	default:
+		break;
+	}
+
+#undef REQUIRE_INPUT
+#undef REQUIRE_OUTPUT
+	return STATUS_SUCCESS;
+}
+
 
 /*
 typedef struct
@@ -284,21 +533,40 @@ Called if dbvm has loaded the driver. Use this to setup a fake irp
 	IRP FakeIRP;
 	BOOL r;
 	PVOID buffer;
-	buffer=ExAllocatePool(PagedPool, max(nInBufferSize, nOutBufferSize));
-	RtlCopyMemory(buffer, lpInBuffer, nInBufferSize);	
+	DWORD bufferSize = max(nInBufferSize, nOutBufferSize);
+
+	if (((nInBufferSize != 0) && (lpInBuffer == NULL)) || ((nOutBufferSize != 0) && (lpOutBuffer == NULL)))
+		return FALSE;
+
+	buffer = bufferSize ? ExAllocatePool(PagedPool, bufferSize) : NULL;
+	if (bufferSize && (buffer == NULL))
+		return FALSE;
+
+	RtlZeroMemory(&FakeIRP, sizeof(FakeIRP));
+	if (bufferSize)
+		RtlZeroMemory(buffer, bufferSize);
+	if (nInBufferSize)
+		RtlCopyMemory(buffer, lpInBuffer, nInBufferSize);
 
 
 	DbgPrint("DispatchIoctlDBVM\n");
 
 	FakeIRP.AssociatedIrp.SystemBuffer=buffer;
 	FakeIRP.Flags=IoControlCode; //(ab)using an unused element
+	FakeIRP.Tail.Overlay.DriverContext[0] = (PVOID)(UINT_PTR)nInBufferSize;
+	FakeIRP.Tail.Overlay.DriverContext[1] = (PVOID)(UINT_PTR)nOutBufferSize;
 
 	r=DispatchIoctl(DeviceObject, &FakeIRP)==STATUS_SUCCESS;
 
 
-	RtlCopyMemory(lpOutBuffer, buffer, nOutBufferSize);
+	if (nOutBufferSize)
+		RtlCopyMemory(lpOutBuffer, buffer, nOutBufferSize);
 
-	ExFreePool(buffer);
+	if (buffer)
+		ExFreePool(buffer);
+
+	if (lpBytesReturned)
+		*lpBytesReturned = r ? nOutBufferSize : 0;
 
 	return r;
 }
@@ -310,14 +578,22 @@ NTSTATUS DispatchIoctl(IN PDEVICE_OBJECT DeviceObject, IN PIRP Irp)
     PIO_STACK_LOCATION     irpStack=NULL;
 	LUID sedebugprivUID;
 	ULONG IoControlCode;
+	ULONG inputBufferLength;
+	ULONG outputBufferLength;
 
 	if (!loadedbydbvm)
 	{
 		irpStack=IoGetCurrentIrpStackLocation(Irp);
 		IoControlCode=irpStack->Parameters.DeviceIoControl.IoControlCode;
+		inputBufferLength = irpStack->Parameters.DeviceIoControl.InputBufferLength;
+		outputBufferLength = irpStack->Parameters.DeviceIoControl.OutputBufferLength;
 	}
 	else
+	{
 		IoControlCode=Irp->Flags;
+		inputBufferLength = (ULONG)(UINT_PTR)Irp->Tail.Overlay.DriverContext[0];
+		outputBufferLength = (ULONG)(UINT_PTR)Irp->Tail.Overlay.DriverContext[1];
+	}
 		
 	//DbgPrint("DispatchIoctl. IoControlCode=%x\n", IoControlCode);
 #ifdef TOBESIGNED
@@ -331,6 +607,12 @@ NTSTATUS DispatchIoctl(IN PDEVICE_OBJECT DeviceObject, IN PIRP Irp)
 	}
 #endif
 	
+	ntStatus = ValidateIoctlBufferLengths(IoControlCode, Irp->AssociatedIrp.SystemBuffer, inputBufferLength, outputBufferLength);
+	if (!NT_SUCCESS(ntStatus))
+		goto completeRequest;
+
+	if ((outputBufferLength > inputBufferLength) && Irp->AssociatedIrp.SystemBuffer)
+		RtlZeroMemory((PUCHAR)Irp->AssociatedIrp.SystemBuffer + inputBufferLength, outputBufferLength - inputBufferLength);
 
 	
     switch(IoControlCode)
@@ -366,11 +648,10 @@ NTSTATUS DispatchIoctl(IN PDEVICE_OBJECT DeviceObject, IN PIRP Irp)
 					UINT64 processid;
 					UINT64 startaddress;
 					WORD bytestowrite;
-				} *pinp,inp;
+				} *pinp;
 
-				DbgPrint("sizeof(inp)=%d\n",sizeof(inp));
 				pinp=Irp->AssociatedIrp.SystemBuffer;
-				ntStatus=WriteProcessMemory((DWORD)pinp->processid,NULL,(PVOID)(UINT_PTR)pinp->startaddress,pinp->bytestowrite,(PVOID)((UINT_PTR)pinp+sizeof(inp))) ? STATUS_SUCCESS : STATUS_UNSUCCESSFUL;
+				ntStatus=WriteProcessMemory((DWORD)pinp->processid,NULL,(PVOID)(UINT_PTR)pinp->startaddress,pinp->bytestowrite,(PVOID)((UINT_PTR)pinp+CE_RW_MEMORY_HEADER_SIZE)) ? STATUS_SUCCESS : STATUS_UNSUCCESSFUL;
 			}
 			__except(1)
 			{
@@ -1085,6 +1366,12 @@ NTSTATUS DispatchIoctl(IN PDEVICE_OBJECT DeviceObject, IN PIRP Irp)
 			{
 				
 				ExAcquireResourceExclusiveLite(&ProcesslistR, TRUE);
+				if (!BufferHasRange(outputBufferLength, 1, (UINT64)ProcessEventCount * sizeof(ProcessEventdta)))
+				{
+					ExReleaseResourceLite(&ProcesslistR);
+					ntStatus = STATUS_BUFFER_TOO_SMALL;
+					break;
+				}
 
 				*(PUCHAR)Irp->AssociatedIrp.SystemBuffer=ProcessEventCount;	
 				RtlCopyMemory((PVOID)((UINT_PTR)Irp->AssociatedIrp.SystemBuffer+1),&ProcessEventdata[0],ProcessEventCount*sizeof(ProcessEventdta));
@@ -1100,6 +1387,12 @@ NTSTATUS DispatchIoctl(IN PDEVICE_OBJECT DeviceObject, IN PIRP Irp)
 		case IOCTL_CE_GETTHREADEVENTS:
 			{
 				ExAcquireResourceExclusiveLite(&ProcesslistR, TRUE);
+				if (!BufferHasRange(outputBufferLength, 1, (UINT64)ThreadEventCount * sizeof(ThreadEventDta)))
+				{
+					ExReleaseResourceLite(&ProcesslistR);
+					ntStatus = STATUS_BUFFER_TOO_SMALL;
+					break;
+				}
 
 				*(PUCHAR)Irp->AssociatedIrp.SystemBuffer=ThreadEventCount;	
 				RtlCopyMemory((PVOID)((UINT_PTR)Irp->AssociatedIrp.SystemBuffer+1),&ThreadEventData[0],ThreadEventCount*sizeof(ThreadEventDta));
@@ -2399,7 +2692,7 @@ NTSTATUS DispatchIoctl(IN PDEVICE_OBJECT DeviceObject, IN PIRP Irp)
 					KeStackAttachProcess((PKPROCESS)selectedprocess, &oldstate);
 					__try
 					{
-						ULONG returnLength;
+					ULONG returnLength = 0;
 
 						if (inp->ProcessInformationAddress == 0)
 						{
@@ -2543,7 +2836,8 @@ NTSTATUS DispatchIoctl(IN PDEVICE_OBJECT DeviceObject, IN PIRP Irp)
     }
 
 	
-    Irp->IoStatus.Status = ntStatus;
+completeRequest:
+	Irp->IoStatus.Status = ntStatus;
     
     // Set # of bytes to copy back to user-mode...
 	if (irpStack) //only NULL when loaded by dbvm

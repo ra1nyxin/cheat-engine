@@ -8,6 +8,44 @@
 #include "UltimapDrvr.h"
 #include "..\ultimap2.h"
 
+static NTSTATUS ValidateIoctlBufferLengths(ULONG ioctl, PVOID buffer, ULONG inputLength, ULONG outputLength)
+{
+#define REQUIRE_INPUT(length) do { if (inputLength < (ULONG)(length)) return STATUS_BUFFER_TOO_SMALL; } while (0)
+#define REQUIRE_OUTPUT(length) do { if (outputLength < (ULONG)(length)) return STATUS_BUFFER_TOO_SMALL; } while (0)
+
+	if ((inputLength || outputLength) && (buffer == NULL))
+		return STATUS_INVALID_PARAMETER;
+
+	switch (ioctl)
+	{
+	case IOCTL_CE_ULTIMAP2:
+		REQUIRE_INPUT(sizeof(UINT32) * 6 + sizeof(URANGE) * 8 + sizeof(WCHAR) * 200);
+		break;
+
+	case IOCTL_CE_ULTIMAP2_WAITFORDATA:
+		REQUIRE_INPUT(sizeof(ULONG));
+		REQUIRE_OUTPUT(sizeof(ULTIMAP2DATAEVENT));
+		break;
+
+	case IOCTL_CE_ULTIMAP2_LOCKFILE:
+	case IOCTL_CE_ULTIMAP2_RELEASEFILE:
+	case IOCTL_CE_ULTIMAP2_CONTINUE:
+		REQUIRE_INPUT(sizeof(int));
+		break;
+
+	case IOCTL_CE_ULTIMAP2_GETTRACESIZE:
+		REQUIRE_OUTPUT(sizeof(UINT64));
+		break;
+
+	default:
+		break;
+	}
+
+#undef REQUIRE_INPUT
+#undef REQUIRE_OUTPUT
+	return STATUS_SUCCESS;
+}
+
 NTSTATUS DispatchIoctl(IN PDEVICE_OBJECT DeviceObject, IN PIRP Irp)
 {
 	NTSTATUS ntStatus=STATUS_UNSUCCESSFUL;
@@ -18,6 +56,16 @@ NTSTATUS DispatchIoctl(IN PDEVICE_OBJECT DeviceObject, IN PIRP Irp)
 
 	irpStack = IoGetCurrentIrpStackLocation(Irp);
 	IoControlCode = irpStack->Parameters.DeviceIoControl.IoControlCode;
+	ntStatus = ValidateIoctlBufferLengths(IoControlCode,
+		Irp->AssociatedIrp.SystemBuffer,
+		irpStack->Parameters.DeviceIoControl.InputBufferLength,
+		irpStack->Parameters.DeviceIoControl.OutputBufferLength);
+	if (!NT_SUCCESS(ntStatus))
+		goto completeRequest;
+
+	if ((irpStack->Parameters.DeviceIoControl.OutputBufferLength > irpStack->Parameters.DeviceIoControl.InputBufferLength) && Irp->AssociatedIrp.SystemBuffer)
+		RtlZeroMemory((PUCHAR)Irp->AssociatedIrp.SystemBuffer + irpStack->Parameters.DeviceIoControl.InputBufferLength,
+			irpStack->Parameters.DeviceIoControl.OutputBufferLength - irpStack->Parameters.DeviceIoControl.InputBufferLength);
 		
     switch(IoControlCode)
     {
@@ -137,7 +185,7 @@ NTSTATUS DispatchIoctl(IN PDEVICE_OBJECT DeviceObject, IN PIRP Irp)
             break;
     }
 
-	
+completeRequest:
     Irp->IoStatus.Status = ntStatus;
     
     // Set # of bytes to copy back to user-mode...
