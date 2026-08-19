@@ -359,12 +359,11 @@ UINT64 getDR7(void)
 }
 
 int cpunr(void)
-{	
-	DWORD x[4];
-	__cpuid(&x[0],1);
-	
-	return (x[1] >> 24)+1;
+	{
+	ULONG processorNumber=KeGetCurrentProcessorNumber();
 
+	// All legacy per-CPU tables in DBK have 256 entries.
+	return (processorNumber<256) ? (int)processorNumber : 0;
 }
 
 EFLAGS getEflags(void)
