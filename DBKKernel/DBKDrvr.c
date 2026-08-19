@@ -383,6 +383,9 @@ NTSTATUS DriverEntry(IN PDRIVER_OBJECT DriverObject,
 	ProcessEventCount = 0;
 	ExInitializeResourceLite(&ProcesslistR);
 #endif
+	ntStatus = initializeAccessedPageList();
+	if (!NT_SUCCESS(ntStatus))
+		DbgPrint("Failed to initialize accessed page list resource: %x\n", ntStatus);
 
 	CreateProcessNotifyRoutineEnabled = FALSE;
 
@@ -694,6 +697,7 @@ void UnloadDriver(PDRIVER_OBJECT DriverObject)
 #endif
 
 	CleanProcessList();
+	cleanupAccessedPageList();
 
 	ExDeleteResourceLite(&ProcesslistR);
 

@@ -72,8 +72,10 @@ BOOLEAN WriteProcessMemory(DWORD PID,PEPROCESS PEProcess,PVOID Address,DWORD Siz
 BOOLEAN IsAddressSafe(UINT_PTR StartAddress);
 NTSTATUS GetMemoryRegionData(DWORD PID,PEPROCESS PEProcess, PVOID mempointer,ULONG *regiontype, UINT_PTR *memorysize,UINT_PTR *baseaddress);
 NTSTATUS markAllPagesAsNeverAccessed(PEPROCESS PEProcess);
-int enumAllAccessedPages(PEPROCESS PEProcess);
-int getAccessedPageList(PPRANGE List, int ListSizeInBytes);
+NTSTATUS initializeAccessedPageList(void);
+void cleanupAccessedPageList(void);
+NTSTATUS enumAllAccessedPages(PEPROCESS PEProcess, int *ListSizeInBytes);
+NTSTATUS getAccessedPageList(PPRANGE List, int ListSizeInBytes);
 
 UINT_PTR getPageTableBase();
 

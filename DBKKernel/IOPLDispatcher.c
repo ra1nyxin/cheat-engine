@@ -2454,14 +2454,11 @@ NTSTATUS DispatchIoctl(IN PDEVICE_OBJECT DeviceObject, IN PIRP Irp)
 				ntStatus = PsLookupProcessByProcessId((PVOID)(UINT_PTR)processid, &selectedprocess);
 				if (NT_SUCCESS(ntStatus))
 				{
-					listSize = enumAllAccessedPages(selectedprocess);
+					ntStatus = enumAllAccessedPages(selectedprocess, &listSize);
 					ObDereferenceObject(selectedprocess);
-					if (listSize < 0)
-						ntStatus = STATUS_INSUFFICIENT_RESOURCES;
-					else
+					if (NT_SUCCESS(ntStatus))
 					{
 						*(int *)Irp->AssociatedIrp.SystemBuffer = listSize;
-						ntStatus = STATUS_SUCCESS;
 					}
 				}
 
@@ -2475,10 +2472,9 @@ NTSTATUS DispatchIoctl(IN PDEVICE_OBJECT DeviceObject, IN PIRP Irp)
 
 				DbgPrint("IOCTL_CE_GETACCESSEDMEMORYLIST\n"); 
 
-				getAccessedPageList(List, ListSizeInBytes);
+				ntStatus = getAccessedPageList(List, ListSizeInBytes);
 
 				DbgPrint("return from IOCTL_CE_GETACCESSEDMEMORYLIST\n");
-				ntStatus = STATUS_SUCCESS;
 				break;
 			}
 

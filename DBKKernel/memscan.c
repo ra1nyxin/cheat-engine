@@ -828,8 +828,12 @@ BOOL walkPagingLayout(PEPROCESS PEProcess, UINT_PTR MaxAddress, PRESENTPAGECALLB
 
 PPENTRY AccessedList = NULL;
 int AccessedListSize;
+ERESOURCE AccessedListResource;
+BOOLEAN AccessedListResourceInitialized = FALSE;
+BOOLEAN AccessedListReady = FALSE;
+BOOLEAN AccessedListAllocationFailed = FALSE;
 
-void CleanAccessedList()
+static void CleanAccessedListUnsafe(void)
 {	
 	PPENTRY e = AccessedList;
 	PPENTRY previous;
@@ -845,6 +849,34 @@ void CleanAccessedList()
 	AccessedList = NULL;
 	AccessedListSize = 0;
 }
+
+NTSTATUS initializeAccessedPageList(void)
+{
+	NTSTATUS status;
+
+	AccessedList = NULL;
+	AccessedListSize = 0;
+	AccessedListReady = FALSE;
+	AccessedListAllocationFailed = FALSE;
+	status = ExInitializeResourceLite(&AccessedListResource);
+	if (NT_SUCCESS(status))
+		AccessedListResourceInitialized = TRUE;
+
+	return status;
+}
+
+void cleanupAccessedPageList(void)
+{
+	if (!AccessedListResourceInitialized)
+		return;
+
+	ExAcquireResourceExclusiveLite(&AccessedListResource, TRUE);
+	CleanAccessedListUnsafe();
+	AccessedListReady = FALSE;
+	ExReleaseResourceLite(&AccessedListResource);
+	ExDeleteResourceLite(&AccessedListResource);
+	AccessedListResourceInitialized = FALSE;
+}
 	
 
 BOOLEAN StoreAccessedRanges(UINT_PTR StartAddress, UINT_PTR EndAddress, struct PTEStruct *pageEntry)
@@ -859,7 +891,10 @@ BOOLEAN StoreAccessedRanges(UINT_PTR StartAddress, UINT_PTR EndAddress, struct P
 			PPENTRY e;
 			e = ExAllocatePool(PagedPool, sizeof(PENTRY));
 			if (e == NULL)
+			{
+				AccessedListAllocationFailed = TRUE;
 				return FALSE;
+			}
 
 			e->Range.StartAddress = StartAddress;
 			e->Range.EndAddress = EndAddress;
@@ -875,44 +910,88 @@ BOOLEAN StoreAccessedRanges(UINT_PTR StartAddress, UINT_PTR EndAddress, struct P
 }
 
 
-int enumAllAccessedPages(PEPROCESS PEProcess)
+NTSTATUS enumAllAccessedPages(PEPROCESS PEProcess, int *ListSizeInBytes)
 {
+	NTSTATUS status;
+	SIZE_T listSize;
 #ifdef AMD64
 	UINT_PTR MaxAddress = 0x80000000000ULL;
 #else
 	UINT_PTR MaxAddress = 0x80000000;
 #endif
 
-	CleanAccessedList();
+	if ((PEProcess == NULL) || (ListSizeInBytes == NULL))
+		return STATUS_INVALID_PARAMETER;
+
+	*ListSizeInBytes = 0;
+	if (!AccessedListResourceInitialized)
+		return STATUS_DEVICE_NOT_READY;
+
+	ExAcquireResourceExclusiveLite(&AccessedListResource, TRUE);
+	if (AccessedListReady)
+	{
+		ExReleaseResourceLite(&AccessedListResource);
+		return STATUS_DEVICE_BUSY;
+	}
+
+	CleanAccessedListUnsafe();
+	AccessedListAllocationFailed = FALSE;
 
 	if (walkPagingLayout(PEProcess, MaxAddress, StoreAccessedRanges))
 	{
 		//DbgPrint("AccessedListSize=%d\n", AccessedListSize);
-		return AccessedListSize*sizeof(PRANGE);
+		listSize = (SIZE_T)AccessedListSize * sizeof(PRANGE);
+		if (listSize > MAXLONG)
+		{
+			CleanAccessedListUnsafe();
+			status = STATUS_INTEGER_OVERFLOW;
+		}
+		else
+		{
+			*ListSizeInBytes = (int)listSize;
+			AccessedListReady = TRUE;
+			status = STATUS_SUCCESS;
+		}
 	}
 	else
 	{
-		CleanAccessedList();
-		return -1;
+		CleanAccessedListUnsafe();
+		status = AccessedListAllocationFailed ? STATUS_INSUFFICIENT_RESOURCES : STATUS_UNSUCCESSFUL;
 	}
+
+	ExReleaseResourceLite(&AccessedListResource);
+	return status;
 }
 
-int getAccessedPageList(PPRANGE List, int ListSizeInBytes)
+NTSTATUS getAccessedPageList(PPRANGE List, int ListSizeInBytes)
 {
-	PPENTRY e = AccessedList;
-	int maxcount = ListSizeInBytes / sizeof(PRANGE);
+	PPENTRY e;
+	SIZE_T requiredSize;
 	int i = 0;
 
 //	DbgPrint("getAccessedPageList\n");
+	if ((ListSizeInBytes < 0) || ((ListSizeInBytes > 0) && (List == NULL)))
+		return STATUS_INVALID_PARAMETER;
+	if (!AccessedListResourceInitialized)
+		return STATUS_DEVICE_NOT_READY;
 
+	ExAcquireResourceExclusiveLite(&AccessedListResource, TRUE);
+	if (!AccessedListReady)
+	{
+		ExReleaseResourceLite(&AccessedListResource);
+		return STATUS_NOT_FOUND;
+	}
+
+	requiredSize = (SIZE_T)AccessedListSize * sizeof(PRANGE);
+	if ((requiredSize > MAXLONG) || ((SIZE_T)ListSizeInBytes < requiredSize))
+	{
+		ExReleaseResourceLite(&AccessedListResource);
+		return STATUS_BUFFER_TOO_SMALL;
+	}
+
+	e = AccessedList;
 	while (e)
 	{
-		if (i >= maxcount)
-		{
-			//DbgPrint("%d>=%d", i, maxcount);
-			break;
-		}
-
 		//DbgPrint("i=%d  (%p -> %p)\n", i, e->Range.StartAddress, e->Range.EndAddress);
 		List[i] = e->Range;
 		e = e->Next;
@@ -920,9 +999,11 @@ int getAccessedPageList(PPRANGE List, int ListSizeInBytes)
 		i++;
 	}
 
-	CleanAccessedList();
+	CleanAccessedListUnsafe();
+	AccessedListReady = FALSE;
+	ExReleaseResourceLite(&AccessedListResource);
 
-	return i*sizeof(PRANGE);
+	return STATUS_SUCCESS;
 }
 
 
