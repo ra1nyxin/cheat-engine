@@ -61,14 +61,64 @@ jobs:
           "LAZBUILD=$($lazbuild.FullName)" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
           & $lazbuild.FullName '--version'
 
-      - name: Locate the Windows Driver Kit
+      - name: Install the legacy WDK build content
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
-          # windows-2022 includes the WDK and its Visual Studio extension.
-          # Fail explicitly if the image no longer provides the version used here.
-          $wdkVersion = '10.0.26100.0'
-          $wdkTargets = Join-Path ${env:ProgramFiles(x86)} "Windows Kits\10\build\$wdkVersion\WindowsDriver.Common.targets"
+          # Current WDK releases no longer ship the x86 kernel import libraries.
+          # Keep using the runner's current MSBuild targets, but install the
+          # pinned 19041 headers and libraries needed to build both DBK drivers.
+          $installer = Join-Path $env:RUNNER_TEMP 'wdk-10.0.19041.685-setup.exe'
+          $url = 'https://download.microsoft.com/download/c/f/8/cf80b955-d578-4635-825c-2801911f9d79/wdk/wdksetup.exe'
+          $expectedHash = '5f4ea0c55af099f97cb569a927c3a290c211f17edcfc65009f5b9253b9827925'
+
+          for ($attempt = 1; $attempt -le 3; $attempt++) {
+            Remove-Item $installer -Force -ErrorAction SilentlyContinue
+            & curl.exe --fail --location --retry 5 --retry-all-errors --connect-timeout 30 --output $installer $url
+            if ($LASTEXITCODE -eq 0 -and (Test-Path $installer)) {
+              $actualHash = (Get-FileHash $installer -Algorithm SHA256).Hash.ToLower()
+              if ($actualHash -eq $expectedHash) { break }
+              Write-Warning "WDK installer checksum mismatch: $actualHash"
+            }
+            if ($attempt -eq 3) { throw 'Could not download the verified WDK 10.0.19041.685 installer.' }
+            Start-Sleep -Seconds (10 * $attempt)
+          }
+
+          $process = Start-Process -FilePath $installer -ArgumentList '/features + /q /norestart' -Wait -PassThru
+          if ($process.ExitCode -notin 0, 3010) {
+            throw "WDK 10.0.19041.685 installation failed with exit code $($process.ExitCode)."
+          }
+
+          $kitRoot = Join-Path ${env:ProgramFiles(x86)} 'Windows Kits\10'
+          $wdkVersion = '10.0.19041.0'
+          $required = @(
+            (Join-Path $kitRoot "Include\$wdkVersion\km\ntddk.h"),
+            (Join-Path $kitRoot "Lib\$wdkVersion\km\x86\ntoskrnl.lib"),
+            (Join-Path $kitRoot "Lib\$wdkVersion\km\x64\ntoskrnl.lib")
+          )
+          $missing = @($required | Where-Object { -not (Test-Path $_) })
+          $x86Kmdf = Get-ChildItem (Join-Path $kitRoot 'Lib\wdf\kmdf\x86\*\wdfdriverentry.lib') -ErrorAction SilentlyContinue
+          if ($missing -or -not $x86Kmdf) {
+            Get-ChildItem (Join-Path $kitRoot 'Include') -Directory -ErrorAction SilentlyContinue | Select-Object -ExpandProperty FullName
+            Get-ChildItem (Join-Path $kitRoot 'Lib') -Directory -ErrorAction SilentlyContinue | Select-Object -ExpandProperty FullName
+            if (-not $x86Kmdf) { $missing += (Join-Path $kitRoot 'Lib\wdf\kmdf\x86\*\wdfdriverentry.lib') }
+            throw "WDK 19041 build content is incomplete:`n$($missing -join "`n")"
+          }
+
+          "WDK_VERSION=$wdkVersion" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
+      - name: Locate the Windows Driver Kit build tools
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          # windows-2022 includes the current WDK targets and Visual Studio
+          # extension. The legacy installer intentionally supplies content only.
+          $buildVersions = Get-ChildItem (Join-Path ${env:ProgramFiles(x86)} 'Windows Kits\10\build') -Directory |
+            Where-Object { Test-Path (Join-Path $_.FullName 'WindowsDriver.Common.targets') } |
+            Sort-Object { [version]$_.Name } -Descending
+          $wdkBuild = $buildVersions | Select-Object -First 1
+          if (-not $wdkBuild) { throw 'No installed WDK MSBuild targets were found.' }
+          $wdkTargets = Join-Path $wdkBuild.FullName 'WindowsDriver.Common.targets'
           if (-not (Test-Path $wdkTargets)) { throw "WDK targets were not found: $wdkTargets" }
 
           $vswhere = Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio\Installer\vswhere.exe'
@@ -78,7 +128,8 @@ jobs:
           if (-not (Test-Path $msbuild)) { throw "MSBuild was not found: $msbuild" }
 
           "MSBUILD=$msbuild" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-          "WDK_VERSION=$wdkVersion" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          Write-Host "Using WDK build targets: $wdkTargets"
+          Write-Host "Using WDK build content: $env:WDK_VERSION"
           & $msbuild -version
 
       - name: Build static FPC executables
