@@ -61,36 +61,13 @@ jobs:
           "LAZBUILD=$($lazbuild.FullName)" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
           & $lazbuild.FullName '--version'
 
-      - name: Install the pinned Windows Driver Kit
+      - name: Locate the Windows Driver Kit
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
-          $installer = Join-Path $env:RUNNER_TEMP 'wdk-10.0.19041.685-setup.exe'
-          $url = 'https://download.microsoft.com/download/c/f/8/cf80b955-d578-4635-825c-2801911f9d79/wdk/wdksetup.exe'
-          $expectedHash = '5f4ea0c55af099f97cb569a927c3a290c211f17edcfc65009f5b9253b9827925'
-          for ($attempt = 1; $attempt -le 3; $attempt++) {
-            Remove-Item $installer -Force -ErrorAction SilentlyContinue
-            & curl.exe --fail --location --retry 5 --retry-all-errors --connect-timeout 30 --output $installer $url
-            if ($LASTEXITCODE -eq 0 -and (Test-Path $installer)) {
-              $actualHash = (Get-FileHash $installer -Algorithm SHA256).Hash.ToLower()
-              if ($actualHash -eq $expectedHash) { break }
-            }
-            if ($attempt -eq 3) { throw 'Could not download the verified WDK 10.0.19041.685 installer.' }
-            Start-Sleep -Seconds (10 * $attempt)
-          }
-
-          $wdkInstalled = $false
-          for ($attempt = 1; $attempt -le 3; $attempt++) {
-            $process = Start-Process -FilePath $installer -ArgumentList '/features + /q /norestart' -Wait -PassThru
-            if ($process.ExitCode -in 0, 3010) {
-              $wdkInstalled = $true
-              break
-            }
-            if ($attempt -lt 3) { Start-Sleep -Seconds (15 * $attempt) }
-          }
-          if (-not $wdkInstalled) { throw 'Could not install Windows Driver Kit 10.0.19041.685.' }
-
-          $wdkVersion = '10.0.19041.0'
+          # windows-2022 includes the WDK and its Visual Studio extension.
+          # Fail explicitly if the image no longer provides the version used here.
+          $wdkVersion = '10.0.26100.0'
           $wdkTargets = Join-Path ${env:ProgramFiles(x86)} "Windows Kits\10\build\$wdkVersion\WindowsDriver.Common.targets"
           if (-not (Test-Path $wdkTargets)) { throw "WDK targets were not found: $wdkTargets" }
 
