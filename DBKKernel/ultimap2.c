@@ -842,9 +842,18 @@ void RTIT_DPC_Handler(__in struct _KDPC *Dpc, __in_opt PVOID DeferredContext, __
 
 void PMI(__in struct _KINTERRUPT *Interrupt, __in PVOID ServiceContext)
 {
+	ULONG cpunr;
+
 	//check if caused by me, if so defer to dpc
 	DbgPrint("PMI");
 	if ((!UltimapActive) || Ultimap2Stopping || (PInfo == NULL))
+	{
+		apic_clearPerfmon();
+		return;
+	}
+
+	cpunr = KeGetCurrentProcessorNumber();
+	if ((cpunr >= (ULONG)Ultimap2CpuCount) || (PInfo[cpunr] == NULL))
 	{
 		apic_clearPerfmon();
 		return;
@@ -873,23 +882,22 @@ void PMI(__in struct _KINTERRUPT *Interrupt, __in PVOID ServiceContext)
 
 			DbgPrint("PMI: IA32_RTIT_OUTPUT_MASK_PTRS %p\n", __readmsr(IA32_RTIT_OUTPUT_MASK_PTRS));
 
-			PInfo[KeGetCurrentProcessorNumber()]->Interrupted = TRUE;
+			PInfo[cpunr]->Interrupted = TRUE;
 
 			KeInsertQueueDpc(&RTID_DPC, NULL, NULL);
-
-			//clear apic state
-
-			apic_clearPerfmon();
 		}
 		else
 		{
 			DbgPrint("Unexpected PMI");
 		}
 	}
-	__except (0)
+	__except (EXCEPTION_EXECUTE_HANDLER)
 	{
 		DbgPrint("PMI exception");
 	}
+
+	//Always acknowledge the local APIC, including unexpected and faulting PMIs.
+	apic_clearPerfmon();
 
 }
 
