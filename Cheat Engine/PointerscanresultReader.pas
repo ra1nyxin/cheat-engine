@@ -55,7 +55,7 @@ type
       f,fm: Thandle;
     end;
 
-    cacheStart: integer;
+    cacheStart: qword;
     cacheSize: size_t;
     cache: pointer;
 
@@ -318,7 +318,7 @@ begin
   begin
     if InRangeQ(i, files[j].startindex, files[j].lastindex) then
     begin
-      wantedoffset:=int64(sizeOfEntry*(i-files[j].startindex));
+      wantedoffset:=qword(sizeOfEntry)*(i-files[j].startindex);
 
 
       if (wantedoffset mod systeminfo.dwAllocationGranularity)<>0 then
@@ -393,7 +393,7 @@ function TPointerscanresultReader.getPointer(i: uint64): PPointerscanResult;
 for those that know what they want
 }
 var
-  cachepos: integer;
+  cachepos: qword;
 
   p: PByteArray;
   bit: integer;
@@ -403,7 +403,7 @@ begin
   if i>=count then exit;
 
   //check if i is in the cache
-  if not InRange(i, cachestart,cachestart+cachesize-1) then
+  if (i<cachestart) or ((i-cachestart)>=cachesize) then
   begin
     //if not, reload the cache starting from i
     if not InitializeCache(i) then exit;
@@ -416,7 +416,7 @@ begin
 
   if fCompressedPtr then
   begin
-    p:=PByteArray(ptrUint(cache)+(cachepos*sizeofentry));
+    p:=PByteArray(ptrUint(cache)+(ptruint(cachepos)*ptruint(sizeofentry)));
 
     CopyMemory(compressedTempBuffer, p, sizeofentry);
 
@@ -493,7 +493,7 @@ begin
   end
   else
   begin
-    result:=PPointerscanResult(ptrUint(cache)+(cachepos*sizeofentry));
+    result:=PPointerscanResult(ptrUint(cache)+(ptruint(cachepos)*ptruint(sizeofentry)));
     if (result.offsetcount<0) or (result.offsetcount>maxlevel) or
        (result.modulenr<-1) or (result.modulenr>=modulelist.count) then
     begin
