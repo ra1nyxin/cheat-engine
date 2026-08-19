@@ -488,7 +488,12 @@ int debugger_stopDebugging(void)
 
 int debugger_unsetGDBreakpoint(int breakpointnr)
 {
-	int result=DebuggerState.breakpoint[breakpointnr].active;
+	int result;
+
+	if ((breakpointnr<0) || (breakpointnr>=4))
+		return FALSE;
+
+	result=DebuggerState.breakpoint[breakpointnr].active;
 	DebuggerState.breakpoint[breakpointnr].active=FALSE;
 	return result; //returns true if it was active
 }
@@ -499,6 +504,9 @@ Will register a specific breakpoint. If global debug is used it'll set this debu
 */
 {
 	//DbgPrint("debugger_setGDBreakpoint(%d, %x, %d, %d)\n", breakpointnr, Address, bt, bl);
+	if ((breakpointnr<0) || (breakpointnr>=4))
+		return FALSE;
+
 	DebuggerState.breakpoint[breakpointnr].active=TRUE;
 	DebuggerState.breakpoint[breakpointnr].address=Address;
 	DebuggerState.breakpoint[breakpointnr].breakType=bt;

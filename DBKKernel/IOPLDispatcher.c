@@ -2106,7 +2106,9 @@ NTSTATUS DispatchIoctl(IN PDEVICE_OBJECT DeviceObject, IN PIRP Irp)
 				DbgPrint("sizeof(struct input)=%d\n",sizeof(struct input));
 				//DbgPrint("address=%llx breakType=%d breakLength=%d\n",inp->address, inp->breakType,inp->breakLength);
 
-				if (inp->active)
+				if ((inp->debugregspot<0) || (inp->debugregspot>=4))
+					ntStatus=STATUS_INVALID_PARAMETER;
+				else if (inp->active)
 				{
 					DbgPrint("activating breapoint %d\n", inp->debugregspot);
 					ntStatus=debugger_setGDBreakpoint(inp->debugregspot, (UINT_PTR)inp->address, (BreakType)inp->breakType, (BreakLength)inp->breakLength);
