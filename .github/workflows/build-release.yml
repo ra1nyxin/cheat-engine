@@ -269,7 +269,7 @@ jobs:
 
           重启后设置才会生效。启用 Secure Boot 的电脑通常需要先关闭 Secure Boot。
           内核驱动具有较高系统权限，仅应在个人研究或隔离测试环境中使用。
-          "@ | Set-Content (Join-Path $driverRoot '使用说明.txt') -Encoding utf8
+          "@ | Set-Content (Join-Path $driverRoot 'README-zh-CN.txt') -Encoding utf8
           $driverAsset = Join-Path $assetDirectory "CheatEngine-DBK-Unsigned-x86-x64-$shortSha.zip"
           Compress-Archive -Path $driverRoot -DestinationPath $driverAsset -CompressionLevel Optimal
 
@@ -297,6 +297,9 @@ jobs:
             $driverNames = @($driverArchive.Entries | Where-Object Name -Like 'DBK*.sys' | ForEach-Object Name | Sort-Object)
             if (($driverNames.Count -ne 2) -or ($driverNames[0] -ne 'DBK32.sys') -or ($driverNames[1] -ne 'DBK64.sys')) {
               throw "Unexpected DBK driver package contents: $($driverNames -join ', ')"
+            }
+            if (-not ($driverArchive.Entries | Where-Object Name -eq 'README-zh-CN.txt')) {
+              throw 'The DBK driver package is missing README-zh-CN.txt.'
             }
             if ($driverArchive.Entries | Where-Object Name -Like 'cheatengine-*.exe') {
               throw 'The DBK driver package must not contain a Cheat Engine executable.'
