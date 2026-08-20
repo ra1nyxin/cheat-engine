@@ -1047,7 +1047,11 @@ int GetDXVersionAndInitDLL(IDXGISwapChain *x, IUnknown **device)
 				//load the dll and use getprocaddress
 				char dllpath[MAX_PATH];
 				strcpy_s(dllpath, MAX_PATH, (char *)shared->CheatEngineDir);
+			#ifdef _AMD64_
+				strcat_s(dllpath, MAX_PATH, "CED3D11Hook64.dll");
+			#else
 				strcat_s(dllpath, MAX_PATH, "CED3D11Hook.dll");
+			#endif
 
 				HMODULE hdll=LoadLibraryA(dllpath);
 				D3D11Hook_SwapChain_Present=(D3D10PlusHookPresentAPICall)GetProcAddress(hdll, "D3D11Hook_SwapChain_Present_imp");
@@ -1062,7 +1066,11 @@ int GetDXVersionAndInitDLL(IDXGISwapChain *x, IUnknown **device)
 			{
 				char dllpath[MAX_PATH];
 				strcpy_s(dllpath, MAX_PATH, (char *)shared->CheatEngineDir);
+			#ifdef _AMD64_
+				strcat_s(dllpath, MAX_PATH, "CED3D10Hook64.dll");
+			#else
 				strcat_s(dllpath, MAX_PATH, "CED3D10Hook.dll");
+			#endif
 
 				HMODULE hdll=LoadLibraryA(dllpath);
 				D3D10_1Hook_SwapChain_Present=(D3D10PlusHookPresentAPICall)GetProcAddress(hdll, "D3D10Hook_SwapChain_Present_imp");
@@ -1076,7 +1084,11 @@ int GetDXVersionAndInitDLL(IDXGISwapChain *x, IUnknown **device)
 			{
 				char dllpath[MAX_PATH];
 				strcpy_s(dllpath, MAX_PATH, (char *)shared->CheatEngineDir);
+			#ifdef _AMD64_
+				strcat_s(dllpath, MAX_PATH, "CED3D10Hook64.dll");
+			#else
 				strcat_s(dllpath, MAX_PATH, "CED3D10Hook.dll");
+			#endif
 
 				HMODULE hdll=LoadLibraryA(dllpath);
 				D3D10Hook_SwapChain_Present=(D3D10PlusHookPresentAPICall)GetProcAddress(hdll, "D3D10Hook_SwapChain_Present_imp");

@@ -134,6 +134,46 @@ jobs:
           Write-Host "Using WDK build content: $env:WDK_VERSION"
           & $msbuild -version
 
+      - name: Build Direct3D hook DLLs
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $nuget = (Get-Command nuget.exe -ErrorAction Stop).Source
+          $packageRoot = Join-Path $env:RUNNER_TEMP 'directx-packages'
+          & $nuget install Microsoft.DXSDK.D3DX -Version 9.29.952.8 -OutputDirectory $packageRoot -ExcludeVersion -NonInteractive
+          if ($LASTEXITCODE -ne 0) { throw 'Could not restore the DirectX SDK compatibility package.' }
+
+          $d3dxTargets = Join-Path $packageRoot 'Microsoft.DXSDK.D3DX\build\native\Microsoft.DXSDK.D3DX.targets'
+          if (-not (Test-Path $d3dxTargets)) { throw "DirectX SDK build targets were not found: $d3dxTargets" }
+
+          $outputs = @(
+            'Cheat Engine\bin\d3dhook.dll',
+            'Cheat Engine\bin\d3dhook64.dll',
+            'Cheat Engine\bin\ced3d9hook.dll',
+            'Cheat Engine\bin\ced3d9hook64.dll',
+            'Cheat Engine\bin\CED3D10Hook.dll',
+            'Cheat Engine\bin\CED3D10Hook64.dll',
+            'Cheat Engine\bin\CED3D11Hook.dll',
+            'Cheat Engine\bin\CED3D11Hook64.dll'
+          )
+          Remove-Item $outputs -Force -ErrorAction SilentlyContinue
+
+          $common = @(
+            'Cheat Engine\Direct x mess\Direct x mess.sln',
+            '/t:Rebuild',
+            '/m',
+            '/p:Configuration=Release',
+            '/p:PlatformToolset=v143',
+            "/p:ForceImportBeforeCppTargets=$d3dxTargets"
+          )
+          & $env:MSBUILD @common '/p:Platform=Win32'
+          if ($LASTEXITCODE -ne 0) { throw 'The 32-bit Direct3D hook build failed.' }
+          & $env:MSBUILD @common '/p:Platform=x64'
+          if ($LASTEXITCODE -ne 0) { throw 'The 64-bit Direct3D hook build failed.' }
+
+          $missing = $outputs | Where-Object { -not (Test-Path $_) }
+          if ($missing) { throw "Direct3D hook output is incomplete:`n$($missing -join "`n")" }
+
       - name: Build static FPC executables
         shell: pwsh
         working-directory: Cheat Engine
@@ -185,6 +225,14 @@ jobs:
             'bin\libmikmod64.dll',
             'bin\libipt-32.dll',
             'bin\libipt-64.dll',
+            'bin\d3dhook.dll',
+            'bin\d3dhook64.dll',
+            'bin\ced3d9hook.dll',
+            'bin\ced3d9hook64.dll',
+            'bin\CED3D10Hook.dll',
+            'bin\CED3D10Hook64.dll',
+            'bin\CED3D11Hook.dll',
+            'bin\CED3D11Hook64.dll',
             'bin\main.lua',
             'bin\autorun',
             'bin\win32\dbghelp.dll',
