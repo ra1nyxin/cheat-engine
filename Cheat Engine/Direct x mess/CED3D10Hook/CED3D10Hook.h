@@ -10,6 +10,8 @@ typedef struct
 	PFONTMAP DefinedFontMap; //Optional pointer to a fontmaparray if it's a font texture
 } TextureData10, *PTextureData10;
 
+extern CRITICAL_SECTION D3D10DeviceLock;
+
 class DXMessD3D10Handler
 {
 private:

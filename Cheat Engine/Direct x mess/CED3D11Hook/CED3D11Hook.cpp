@@ -6,10 +6,32 @@
 
 
 using namespace std;
-map<ID3D11Device *, DXMessD3D11Handler *> D3D11devices;
+map<IDXGISwapChain *, DXMessD3D11Handler *> D3D11devices;
+CRITICAL_SECTION D3D11DeviceLock;
 
-DXMessD3D11Handler *lastdevice=NULL;
-int insidehook=0;
+class D3D11DeviceLockGuard
+{
+public:
+	D3D11DeviceLockGuard() { EnterCriticalSection(&D3D11DeviceLock); }
+	~D3D11DeviceLockGuard() { LeaveCriticalSection(&D3D11DeviceLock); }
+};
+
+DXMessD3D11Handler *FindD3D11Handler(ID3D11Device *device)
+{
+	DXMessD3D11Handler *result=NULL;
+	map<IDXGISwapChain *, DXMessD3D11Handler *>::iterator i;
+	for (i=D3D11devices.begin(); i!=D3D11devices.end(); i++)
+		if (i->second && (i->second->dev==device))
+		{
+			if (i->second->makeSnapshot)
+				return i->second;
+			if (result==NULL)
+				result=i->second;
+		}
+	return result;
+}
+
+__declspec(thread) int insidehook=0;
 PD3DHookShared shared;
 BOOL makeSnapshot;
 
@@ -2117,11 +2139,12 @@ void DXMessD3D11Handler::RenderOverlay()
 
 void __stdcall D3D11Hook_SwapChain_ResizeBuffers_imp(IDXGISwapChain *swapchain, ID3D11Device *device, PD3DHookShared s)
 {
-	DXMessD3D11Handler *currentDevice=D3D11devices[device];
-	if (currentDevice)
+	D3D11DeviceLockGuard lock;
+	map<IDXGISwapChain *, DXMessD3D11Handler *>::iterator i=D3D11devices.find(swapchain);
+	if (i!=D3D11devices.end())
 	{
-		D3D11devices[device]=NULL;
-		lastdevice=NULL;
+		DXMessD3D11Handler *currentDevice=i->second;
+		D3D11devices.erase(i);
 
 		//currentDevice->dc->ClearState();
 		delete(currentDevice);
@@ -2131,30 +2154,19 @@ void __stdcall D3D11Hook_SwapChain_ResizeBuffers_imp(IDXGISwapChain *swapchain, 
 
 void __stdcall D3D11Hook_SwapChain_Present_imp(IDXGISwapChain *swapchain, ID3D11Device *device, PD3DHookShared s)
 {
-	//look up the controller class for this device
-
-	DXMessD3D11Handler *currenthandler=D3D11devices[device];
-	
-
-
+	D3D11DeviceLockGuard lock;
+	map<IDXGISwapChain *, DXMessD3D11Handler *>::iterator i=D3D11devices.find(swapchain);
+	DXMessD3D11Handler *currenthandler=(i==D3D11devices.end()) ? NULL : i->second;
 	if (currenthandler==NULL)
 	{
-		//OutputDebugStringA("New\n");
-		//D3D11devices[dev]=1;
-
 		currenthandler=new DXMessD3D11Handler(device, swapchain, s);//create a new devicehandler
-
-		//add to the map
-		D3D11devices[device]=currenthandler;
+		D3D11devices[swapchain]=currenthandler;
 		shared=s;
-
 	}
 
 	insidehook=1;
-	D3D11devices[device]->RenderOverlay();			
+	currenthandler->RenderOverlay();
 	insidehook=0;
-
-	lastdevice=currenthandler;
 
 	//check if a snapshot key is down
 
@@ -2258,13 +2270,11 @@ HRESULT __stdcall D3D11Hook_DrawIndexed_imp(D3D11_DRAWINDEXED_ORIGINAL originalf
 	{
 		//setup for wireframe and/or zbuffer
 		HRESULT hr;
+		D3D11DeviceLockGuard lock;
 		ID3D11Device *device=NULL;
 		dc->GetDevice(&device);		
 		
-		DXMessD3D11Handler *currentDevice=D3D11devices[device];		
-
-		if (currentDevice==NULL) //this can happen in some situations when there is a layer inbetween
-			currentDevice=lastdevice;			
+		DXMessD3D11Handler *currentDevice=FindD3D11Handler(device);
 	
 
 		if (currentDevice)
@@ -2321,17 +2331,13 @@ HRESULT __stdcall D3D11Hook_Draw_imp(D3D11_DRAW_ORIGINAL originalfunction, ID3D1
 	{
 		//setup for wireframe and/or zbuffer
 		HRESULT hr;
+		D3D11DeviceLockGuard lock;
 		ID3D11Device *device=NULL;
 		dc->GetDevice(&device);		
 		
-		DXMessD3D11Handler *currentDevice=D3D11devices[device];		
+		DXMessD3D11Handler *currentDevice=FindD3D11Handler(device);
 
 		device->Release();
-
-
-
-		if (currentDevice==NULL) //this can happen in some situations when there is a layer inbetween
-			currentDevice=lastdevice;			
 
 
 		if (currentDevice)
@@ -2385,14 +2391,12 @@ HRESULT __stdcall D3D11Hook_DrawIndexedInstanced_imp(D3D11_DRAWINDEXEDINSTANCED_
 		//setup for wireframe and/or zbuffer
 		HRESULT hr;
 		ID3D11DeviceContext *drawdc;
+		D3D11DeviceLockGuard lock;
 		ID3D11Device *device=NULL;
 		dc->GetDevice(&device);		
 		
-		DXMessD3D11Handler *currentDevice=D3D11devices[device];		
+		DXMessD3D11Handler *currentDevice=FindD3D11Handler(device);
 		device->Release();
-
-		if (currentDevice==NULL) //this can happen in some situations when there is a layer inbetween
-			currentDevice=lastdevice;	
 
 		if (currentDevice)
 		{
@@ -2445,14 +2449,12 @@ HRESULT __stdcall D3D11Hook_DrawInstanced_imp(D3D11_DRAWINSTANCED_ORIGINAL origi
 		//setup for wireframe and/or zbuffer
 		HRESULT hr;
 		ID3D11DeviceContext *drawdc;
+		D3D11DeviceLockGuard lock;
 		ID3D11Device *device=NULL;
 		dc->GetDevice(&device);		
 		
-		DXMessD3D11Handler *currentDevice=D3D11devices[device];		
+		DXMessD3D11Handler *currentDevice=FindD3D11Handler(device);
 		device->Release();
-
-		if (currentDevice==NULL) //this can happen in some situations when there is a layer inbetween
-			currentDevice=lastdevice;	
 
 		if (currentDevice)
 		{
@@ -2504,14 +2506,12 @@ HRESULT __stdcall D3D11Hook_DrawAuto_imp(D3D11_DRAWAUTO_ORIGINAL originalfunctio
 		//setup for wireframe and/or zbuffer
 		HRESULT hr;
 		ID3D11DeviceContext *drawdc;
+		D3D11DeviceLockGuard lock;
 		ID3D11Device *device=NULL;
 		dc->GetDevice(&device);		
 		
-		DXMessD3D11Handler *currentDevice=D3D11devices[device];		
+		DXMessD3D11Handler *currentDevice=FindD3D11Handler(device);
 		device->Release();
-
-		if (currentDevice==NULL) //this can happen in some situations when there is a layer inbetween
-			currentDevice=lastdevice;	
 
 		if (currentDevice)
 		{

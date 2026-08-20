@@ -4,12 +4,33 @@
 #include "stdafx.h"
 
 using namespace std;
-map<ID3D10Device *, DXMessD3D10Handler *> D3D10devices;
+map<IDXGISwapChain *, DXMessD3D10Handler *> D3D10devices;
+CRITICAL_SECTION D3D10DeviceLock;
+
+class D3D10DeviceLockGuard
+{
+public:
+	D3D10DeviceLockGuard() { EnterCriticalSection(&D3D10DeviceLock); }
+	~D3D10DeviceLockGuard() { LeaveCriticalSection(&D3D10DeviceLock); }
+};
+
+DXMessD3D10Handler *FindD3D10Handler(ID3D10Device *device)
+{
+	DXMessD3D10Handler *result=NULL;
+	map<IDXGISwapChain *, DXMessD3D10Handler *>::iterator i;
+	for (i=D3D10devices.begin(); i!=D3D10devices.end(); i++)
+		if (i->second && (i->second->dev==device))
+		{
+			if (i->second->makeSnapshot)
+				return i->second;
+			if (result==NULL)
+				result=i->second;
+		}
+	return result;
+}
 
 PD3DHookShared shared=NULL;
-int insidehook=0;
-
-DXMessD3D10Handler *lastdevice;
+__declspec(thread) int insidehook=0;
 
 BOOL makeSnapshot=FALSE; //duplicate variable to be used as a hint that one of the devices is making a snapshot. (in case of multiple devices)
 
@@ -1414,12 +1435,13 @@ void DXMessD3D10Handler::RenderOverlay()
 
 void __stdcall D3D10Hook_SwapChain_ResizeBuffers_imp(IDXGISwapChain *swapchain, ID3D10Device *device, PD3DHookShared s)
 {
+	D3D10DeviceLockGuard lock;
 	//release all buffers
-	DXMessD3D10Handler *currentDevice=D3D10devices[device];
-	if (currentDevice)
+	map<IDXGISwapChain *, DXMessD3D10Handler *>::iterator i=D3D10devices.find(swapchain);
+	if (i!=D3D10devices.end())
 	{
-		D3D10devices[device]=NULL;
-		lastdevice=NULL;
+		DXMessD3D10Handler *currentDevice=i->second;
+		D3D10devices.erase(i);
 
 		device->ClearState();
 		delete(currentDevice);
@@ -1431,21 +1453,16 @@ void __stdcall D3D10Hook_SwapChain_ResizeBuffers_imp(IDXGISwapChain *swapchain, 
 
 void __stdcall D3D10Hook_SwapChain_Present_imp(IDXGISwapChain *swapchain, ID3D10Device *device, PD3DHookShared s)
 {
-	//look up the controller class for this device
-	DXMessD3D10Handler *currentDevice=D3D10devices[device];
-
-		
-
-	
+	D3D10DeviceLockGuard lock;
+	map<IDXGISwapChain *, DXMessD3D10Handler *>::iterator i=D3D10devices.find(swapchain);
+	DXMessD3D10Handler *currentDevice=(i==D3D10devices.end()) ? NULL : i->second;
 	if (currentDevice==NULL)
 	{
 		currentDevice=new DXMessD3D10Handler(device, swapchain, s);//create a new devicehandler
-		D3D10devices[device]=currentDevice;
+		D3D10devices[swapchain]=currentDevice;
 		shared=s;
 	}
 	insidehook=1; //tell the draw hooks not to mess with the following draw operations
-
-	lastdevice=currentDevice;
 
 	currentDevice->RenderOverlay();	
 	insidehook=0;
@@ -1546,12 +1563,8 @@ HRESULT __stdcall D3D10Hook_DrawIndexed_imp(D3D10_DRAWINDEXED_ORIGINAL originalf
 	{
 		//setup for wireframe and/or zbuffer
 		HRESULT hr;
-		DXMessD3D10Handler *currentDevice=D3D10devices[device];
-
-		if (currentDevice==NULL) //this can happen in some situations when there is a layer inbetween
-		{
-			currentDevice=lastdevice;			
-		}
+		D3D10DeviceLockGuard lock;
+		DXMessD3D10Handler *currentDevice=FindD3D10Handler(device);
 	
 		
 
@@ -1600,12 +1613,8 @@ HRESULT __stdcall D3D10Hook_Draw_imp(D3D10_DRAW_ORIGINAL originalfunction, ID3D1
 	{
 		//setup for wireframe and/or zbuffer
 		HRESULT hr;
-		DXMessD3D10Handler *currentDevice=D3D10devices[device];
-
-		if (currentDevice==NULL) //this can happen in some situations when there is a layer inbetween
-		{
-			currentDevice=lastdevice;			
-		}
+		D3D10DeviceLockGuard lock;
+		DXMessD3D10Handler *currentDevice=FindD3D10Handler(device);
 
 
 		if (currentDevice)
@@ -1647,12 +1656,8 @@ HRESULT __stdcall D3D10Hook_DrawIndexedInstanced_imp(D3D10_DRAWINDEXEDINSTANCED_
 	{
 		//setup for wireframe and/or zbuffer
 		HRESULT hr;
-		DXMessD3D10Handler *currentDevice=D3D10devices[device];
-
-		if (currentDevice==NULL) //this can happen in some situations when there is a layer inbetween
-		{
-			currentDevice=lastdevice;	
-		}
+		D3D10DeviceLockGuard lock;
+		DXMessD3D10Handler *currentDevice=FindD3D10Handler(device);
 
 		if (currentDevice)
 		{
@@ -1692,12 +1697,8 @@ HRESULT __stdcall D3D10Hook_DrawInstanced_imp(D3D10_DRAWINSTANCED_ORIGINAL origi
 	{
 		//setup for wireframe and/or zbuffer
 		HRESULT hr;
-		DXMessD3D10Handler *currentDevice=D3D10devices[device];
-
-		if (currentDevice==NULL) //this can happen in some situations when there is a layer inbetween
-		{
-			currentDevice=lastdevice;	
-		}
+		D3D10DeviceLockGuard lock;
+		DXMessD3D10Handler *currentDevice=FindD3D10Handler(device);
 
 		if (currentDevice)
 		{
@@ -1738,12 +1739,8 @@ HRESULT __stdcall D3D10Hook_DrawAuto_imp(D3D10_DRAWAUTO_ORIGINAL originalfunctio
 	{
 		//setup for wireframe and/or zbuffer
 		HRESULT hr;
-		DXMessD3D10Handler *currentDevice=D3D10devices[device];
-
-		if (currentDevice==NULL) //this can happen in some situations when there is a layer inbetween
-		{
-			currentDevice=lastdevice;	
-		}
+		D3D10DeviceLockGuard lock;
+		DXMessD3D10Handler *currentDevice=FindD3D10Handler(device);
 
 		if (currentDevice)
 		{

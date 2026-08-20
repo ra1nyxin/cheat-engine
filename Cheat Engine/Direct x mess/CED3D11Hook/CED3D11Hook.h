@@ -9,6 +9,8 @@ typedef struct
 	PFONTMAP DefinedFontMap; //Optional pointer to a fontmaparray if it's a font texture
 } TextureData11, *PTextureData11;
 
+extern CRITICAL_SECTION D3D11DeviceLock;
+
 class DXMessD3D11Handler
 {
 private:
