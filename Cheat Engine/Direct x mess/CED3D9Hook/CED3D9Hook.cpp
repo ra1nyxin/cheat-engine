@@ -933,13 +933,13 @@ HRESULT __stdcall D3D9Hook_Reset_imp(D3D9_RESET_ORIGINAL originalfunction, IDire
 {
 	HRESULT hr;
 	DXMessD3D9Handler *currenthandler=D3D9devices[device];
-	if (currenthandler) 
-	{
-		currenthandler->BeforeReset();
-		hr=originalfunction(device, pPresentationParameters);
-		if (SUCCEEDED(hr))
-			currenthandler->AfterReset();		
-	}
+	if (currenthandler==NULL)
+		return originalfunction(device, pPresentationParameters);
+
+	currenthandler->BeforeReset();
+	hr=originalfunction(device, pPresentationParameters);
+	if (SUCCEEDED(hr))
+		currenthandler->AfterReset();
 
 	return hr;
 }
