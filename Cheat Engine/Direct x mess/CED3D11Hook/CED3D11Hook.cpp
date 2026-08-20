@@ -653,14 +653,21 @@ void DXMessD3D11Handler::TakeSnapshot(ID3D11DeviceContext *dc, char* functionnam
 								
 								xpos=(int)floor(texDesc.Width * smallSnapshotPointRelative.x);
 								ypos=(int)floor(texDesc.Height * smallSnapshotPointRelative.y);
+								if (xpos<0) xpos=0;
+								if (ypos<0) ypos=0;
+								if (xpos>=(int)texDesc.Width) xpos=texDesc.Width-1;
+								if (ypos>=(int)texDesc.Height) ypos=texDesc.Height-1;
 
 								//check if the pixel at xpos,ypos is not 0xffff00ff		
 
 								//use texDesc.Format to figure out where the pixel is located (size) and what format is equivalent to 1,0,1
 								
 
-								if ((texDesc.Format>=DXGI_FORMAT_R32G32B32A32_TYPELESS) && (texDesc.Format<=DXGI_FORMAT_R32G32B32_SINT))
+								if ((texDesc.Format>=DXGI_FORMAT_R32G32B32A32_TYPELESS) && (texDesc.Format<=DXGI_FORMAT_R32G32B32A32_SINT))
 									pixelsize=16;
+								else
+								if ((texDesc.Format>=DXGI_FORMAT_R32G32B32_TYPELESS) && (texDesc.Format<=DXGI_FORMAT_R32G32B32_SINT))
+									pixelsize=12;
 								else
 								if ((texDesc.Format>=DXGI_FORMAT_R16G16B16A16_TYPELESS) && (texDesc.Format<=DXGI_FORMAT_X32_TYPELESS_G8X24_UINT ))
 									pixelsize=8;
@@ -706,6 +713,21 @@ void DXMessD3D11Handler::TakeSnapshot(ID3D11DeviceContext *dc, char* functionnam
 												
 												savethis=((c->c1!=0xffffffff) || (c->c2!=0x00000000) || (c->c3!=0xffffffff)); 
 										
+											}
+											break;
+										}
+
+										case 12:
+										{
+											if (texDesc.Format==DXGI_FORMAT_R32G32B32_FLOAT)
+											{
+												FLOAT *c=(FLOAT *)color;
+												savethis=((c[0]!=1.0f) || (c[1]!=0.0f) || (c[2]!=1.0f));
+											}
+											else
+											{
+												DWORD *c=(DWORD *)color;
+												savethis=((c[0]!=0xffffffff) || (c[1]!=0x00000000) || (c[2]!=0xffffffff));
 											}
 											break;
 										}
@@ -2176,10 +2198,23 @@ void __stdcall D3D11Hook_SwapChain_Present_imp(IDXGISwapChain *swapchain, ID3D11
 
 				GetClientRect((HWND)shared->lastHwnd, &currenthandler->smallSnapshotClientRect);
 
+				int clientwidth=currenthandler->smallSnapshotClientRect.right-currenthandler->smallSnapshotClientRect.left;
+				int clientheight=currenthandler->smallSnapshotClientRect.bottom-currenthandler->smallSnapshotClientRect.top;
+				if ((clientwidth<=0) || (clientheight<=0))
+				{
+					currenthandler->makeSnapshot=FALSE;
+					currenthandler->smallSnapshot=FALSE;
+				}
+				else
+				{
+					if (currenthandler->smallSnapshotPoint.x<0) currenthandler->smallSnapshotPoint.x=0;
+					if (currenthandler->smallSnapshotPoint.y<0) currenthandler->smallSnapshotPoint.y=0;
+					if (currenthandler->smallSnapshotPoint.x>=clientwidth) currenthandler->smallSnapshotPoint.x=clientwidth-1;
+					if (currenthandler->smallSnapshotPoint.y>=clientheight) currenthandler->smallSnapshotPoint.y=clientheight-1;
 
-				//get the relative position (0.00 - 1.00) this position is in for the clientrect
-				currenthandler->smallSnapshotPointRelative.x=(float)currenthandler->smallSnapshotPoint.x/(float)(currenthandler->smallSnapshotClientRect.right-currenthandler->smallSnapshotClientRect.left);
-				currenthandler->smallSnapshotPointRelative.y=(float)currenthandler->smallSnapshotPoint.y/(float)(currenthandler->smallSnapshotClientRect.bottom-currenthandler->smallSnapshotClientRect.top);
+					currenthandler->smallSnapshotPointRelative.x=(float)currenthandler->smallSnapshotPoint.x/(float)clientwidth;
+					currenthandler->smallSnapshotPointRelative.y=(float)currenthandler->smallSnapshotPoint.y/(float)clientheight;
+				}
 			}
 			
 		}

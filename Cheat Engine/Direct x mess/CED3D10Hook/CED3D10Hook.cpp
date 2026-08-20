@@ -158,6 +158,10 @@ void DXMessD3D10Handler::TakeSnapshot(char *functionname)
 								
 								xpos=(int)floor(texDesc.Width * smallSnapshotPointRelative.x);
 								ypos=(int)floor(texDesc.Height * smallSnapshotPointRelative.y);
+								if (xpos<0) xpos=0;
+								if (ypos<0) ypos=0;
+								if (xpos>=(int)texDesc.Width) xpos=texDesc.Width-1;
+								if (ypos>=(int)texDesc.Height) ypos=texDesc.Height-1;
 
 								//check if the pixel at xpos,ypos is not 0xffff00ff
 
@@ -1488,10 +1492,23 @@ void __stdcall D3D10Hook_SwapChain_Present_imp(IDXGISwapChain *swapchain, ID3D10
 
 				GetClientRect((HWND)shared->lastHwnd, &currentDevice->smallSnapshotClientRect);
 
+				int clientwidth=currentDevice->smallSnapshotClientRect.right-currentDevice->smallSnapshotClientRect.left;
+				int clientheight=currentDevice->smallSnapshotClientRect.bottom-currentDevice->smallSnapshotClientRect.top;
+				if ((clientwidth<=0) || (clientheight<=0))
+				{
+					currentDevice->makeSnapshot=FALSE;
+					currentDevice->smallSnapshot=FALSE;
+				}
+				else
+				{
+					if (currentDevice->smallSnapshotPoint.x<0) currentDevice->smallSnapshotPoint.x=0;
+					if (currentDevice->smallSnapshotPoint.y<0) currentDevice->smallSnapshotPoint.y=0;
+					if (currentDevice->smallSnapshotPoint.x>=clientwidth) currentDevice->smallSnapshotPoint.x=clientwidth-1;
+					if (currentDevice->smallSnapshotPoint.y>=clientheight) currentDevice->smallSnapshotPoint.y=clientheight-1;
 
-				//get the relative position (0.00 - 1.00) this position is in for the clientrect
-				currentDevice->smallSnapshotPointRelative.x=(float)currentDevice->smallSnapshotPoint.x/(float)(currentDevice->smallSnapshotClientRect.right-currentDevice->smallSnapshotClientRect.left);
-				currentDevice->smallSnapshotPointRelative.y=(float)currentDevice->smallSnapshotPoint.y/(float)(currentDevice->smallSnapshotClientRect.bottom-currentDevice->smallSnapshotClientRect.top);
+					currentDevice->smallSnapshotPointRelative.x=(float)currentDevice->smallSnapshotPoint.x/(float)clientwidth;
+					currentDevice->smallSnapshotPointRelative.y=(float)currentDevice->smallSnapshotPoint.y/(float)clientheight;
+				}
 			}
 			
 		}

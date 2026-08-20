@@ -56,6 +56,10 @@ void DXMessD3D9Handler::TakeSnapshot(char *functionname)
 							
 							xpos=(int)floor(desc.Width * smallSnapshotPointRelative.x);
 							ypos=(int)floor(desc.Height * smallSnapshotPointRelative.y);
+							if (xpos<0) xpos=0;
+							if (ypos<0) ypos=0;
+							if (xpos>=(int)desc.Width) xpos=desc.Width-1;
+							if (ypos>=(int)desc.Height) ypos=desc.Height-1;
 
 							
 						    color=(DWORD *)((UINT_PTR)r.pBits+r.Pitch*ypos+xpos*4);
@@ -901,10 +905,23 @@ void __stdcall D3D9Hook_Present_imp(IDirect3DDevice9 *device, PD3DHookShared s)
 
 				GetClientRect((HWND)shared->lastHwnd, &currenthandler->smallSnapshotClientRect);
 
+				int clientwidth=currenthandler->smallSnapshotClientRect.right-currenthandler->smallSnapshotClientRect.left;
+				int clientheight=currenthandler->smallSnapshotClientRect.bottom-currenthandler->smallSnapshotClientRect.top;
+				if ((clientwidth<=0) || (clientheight<=0))
+				{
+					currenthandler->makeSnapshot=FALSE;
+					currenthandler->smallSnapshot=FALSE;
+				}
+				else
+				{
+					if (currenthandler->smallSnapshotPoint.x<0) currenthandler->smallSnapshotPoint.x=0;
+					if (currenthandler->smallSnapshotPoint.y<0) currenthandler->smallSnapshotPoint.y=0;
+					if (currenthandler->smallSnapshotPoint.x>=clientwidth) currenthandler->smallSnapshotPoint.x=clientwidth-1;
+					if (currenthandler->smallSnapshotPoint.y>=clientheight) currenthandler->smallSnapshotPoint.y=clientheight-1;
 
-				//get the relative position (0.00 - 1.00) this position is in for the clientrect
-				currenthandler->smallSnapshotPointRelative.x=(float)currenthandler->smallSnapshotPoint.x/(float)(currenthandler->smallSnapshotClientRect.right-currenthandler->smallSnapshotClientRect.left);
-				currenthandler->smallSnapshotPointRelative.y=(float)currenthandler->smallSnapshotPoint.y/(float)(currenthandler->smallSnapshotClientRect.bottom-currenthandler->smallSnapshotClientRect.top);
+					currenthandler->smallSnapshotPointRelative.x=(float)currenthandler->smallSnapshotPoint.x/(float)clientwidth;
+					currenthandler->smallSnapshotPointRelative.y=(float)currenthandler->smallSnapshotPoint.y/(float)clientheight;
+				}
 			}
 			
 		}
