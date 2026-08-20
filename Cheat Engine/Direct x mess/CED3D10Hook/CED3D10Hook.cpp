@@ -487,31 +487,42 @@ BOOL DXMessD3D10Handler::UpdateTextures()
 	//call this each time the resolution changes (when the buffer changes)
 	HRESULT hr;
 	ID3D10Resource *test;
-	ID3D10Texture2D *texturex;
 	DXGI_SWAP_CHAIN_DESC desc;
 	int i;
 
 	int newTextureCount;
 
 
-	WaitForSingleObject((HANDLE)(shared->TextureLock), INFINITE);
+	if (WaitForSingleObject((HANDLE)(shared->TextureLock), INFINITE)!=WAIT_OBJECT_0)
+		return FALSE;
 	
 	if (shared->textureCount)
 	{
 		ZeroMemory(&desc, sizeof(desc));
 		hr=swapchain->GetDesc(&desc);
 		if (FAILED(hr))
+		{
+			SetEvent((HANDLE)(shared->TextureLock));
 			return hr;
+		}
 
 		newTextureCount=shared->textureCount;
 
 		if (shared->textureCount > TextureCount)
 		{				
 			//update the textures if needed
+			TextureData10 *newtextures;
 			if (textures==NULL) //initial alloc
-				textures=(TextureData10 *)malloc(sizeof(TextureData10)* shared->textureCount);			
+				newtextures=(TextureData10 *)malloc(sizeof(TextureData10)* shared->textureCount);
 			else //realloc
-				textures=(TextureData10 *)realloc(textures, sizeof(TextureData10)* shared->textureCount);		
+				newtextures=(TextureData10 *)realloc(textures, sizeof(TextureData10)* shared->textureCount);
+
+			if (newtextures==NULL)
+			{
+				SetEvent((HANDLE)(shared->TextureLock));
+				return FALSE;
+			}
+			textures=newtextures;
 
 			//initialize the new entries to NULL
 			for (i=TextureCount; i<shared->textureCount; i++)
@@ -547,20 +558,17 @@ BOOL DXMessD3D10Handler::UpdateTextures()
 					if( FAILED( hr ) )
 					{
 						OutputDebugStringA("Failure creating a texture");
+						SetEvent((HANDLE)(shared->TextureLock));
 						return hr;
 					}
 
-					
-					hr=test->QueryInterface(__uuidof(ID3D10Texture2D), (void **)(&texturex));	
-
-
 					hr=dev->CreateShaderResourceView(test, NULL, &textures[i].pTexture);
-					if( FAILED( hr ) )
-						return hr;
-			
-
 					test->Release();
-					texturex->Release();
+					if( FAILED( hr ) )
+					{
+						SetEvent((HANDLE)(shared->TextureLock));
+						return hr;
+					}
 
 					if (tea[i].AddressOfFontmap)
 					{
@@ -568,6 +576,11 @@ BOOL DXMessD3D10Handler::UpdateTextures()
 						float currentOffset=0;
 
 						textures[i].DefinedFontMap=(PFONTMAP)malloc(sizeof(FONTMAP));
+						if (textures[i].DefinedFontMap==NULL)
+						{
+							SetEvent((HANDLE)(shared->TextureLock));
+							return FALSE;
+						}
 						//now parse the fontmap provided by ce and fill in the gaps						
 						
 						
