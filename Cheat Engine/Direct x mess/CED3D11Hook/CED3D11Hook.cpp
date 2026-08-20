@@ -2038,7 +2038,7 @@ void DXMessD3D11Handler::RenderOverlay()
 
 		if (oldvsinstances)
 		{
-			for (UINT j=0; j<gci_count; j++)
+			for (UINT j=0; j<vci_count; j++)
 				oldvsinstances[j]->Release();
 			delete [] oldvsinstances;
 		}
