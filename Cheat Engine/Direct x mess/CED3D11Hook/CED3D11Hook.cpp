@@ -546,6 +546,7 @@ ID3D11DeviceContext *DXMessD3D11Handler::PrepareForSnapshot(ID3D11DeviceContext 
 void DXMessD3D11Handler::TakeSnapshot(ID3D11DeviceContext *dc, char* functionname)
 {
 	ID3D11DeviceContext *drawdc=dc;
+	ID3D11DeviceContext *immediateContext=NULL;
 	
 	ID3D11RenderTargetView *currentrt=NULL ;
 
@@ -559,15 +560,21 @@ void DXMessD3D11Handler::TakeSnapshot(ID3D11DeviceContext *dc, char* functionnam
 		dc->OMGetRenderTargets(1, &currentrt, NULL);
 		if (dc->GetType()!=D3D11_DEVICE_CONTEXT_IMMEDIATE)
 		{
-			ID3D11CommandList *cl;
+			ID3D11CommandList *cl=NULL;
 			if (SUCCEEDED(dc->FinishCommandList(TRUE, &cl)))
 			{
 				
-				dev->GetImmediateContext(&dc);
+				dev->GetImmediateContext(&immediateContext);
+				dc=immediateContext;
 				dc->ExecuteCommandList(cl, TRUE);
+				if (cl)
+					cl->Release();
 			}
 			else
-				dev->GetImmediateContext(&dc);
+			{
+				dev->GetImmediateContext(&immediateContext);
+				dc=immediateContext;
+			}
 
 			
 		}
@@ -996,6 +1003,9 @@ void DXMessD3D11Handler::TakeSnapshot(ID3D11DeviceContext *dc, char* functionnam
 	
 	}
 
+	if (immediateContext)
+		immediateContext->Release();
+
 	LeaveCriticalSection(&cs);
 	
 }
@@ -1038,7 +1048,11 @@ void DXMessD3D11Handler::DrawString(D3D11_VIEWPORT vp, PTextureData11 pFontTextu
 		dev->GetImmediateContext(&dc);
 		SetupFontVertexBuffer(strlen);
 
-		if (currentMaxCharacterCount<strlen) return; //error
+		if (currentMaxCharacterCount<strlen)
+		{
+			dc->Release();
+			return; //error
+		}
 
 		//The following code is mainly ripped from DXUTgui.cpp and modified to support dynamic sized characters
 		
@@ -1339,6 +1353,9 @@ DXMessD3D11Handler::~DXMessD3D11Handler()
 
 	if (pDisabledDepthStencilState)
 		pDisabledDepthStencilState->Release();
+
+	if (RenderContext)
+		RenderContext->Release();
 
 	/*if (dc)
 		dc->Release();*/
@@ -2133,6 +2150,7 @@ void DXMessD3D11Handler::RenderOverlay()
 		
 
 		//check if the overlay texture needs to be updated, if so, getdc, update, continue
+		dc->Release();
 	}
 
 }
@@ -2256,6 +2274,7 @@ void __stdcall D3D11Hook_SwapChain_Present_imp(IDXGISwapChain *swapchain, ID3D11
 			}
 
 			currenthandler->snapshotCounter=0;
+			dc->Release();
 			
 
 		}
@@ -2275,6 +2294,7 @@ HRESULT __stdcall D3D11Hook_DrawIndexed_imp(D3D11_DRAWINDEXED_ORIGINAL originalf
 		dc->GetDevice(&device);		
 		
 		DXMessD3D11Handler *currentDevice=FindD3D11Handler(device);
+		device->Release();
 	
 
 		if (currentDevice)
