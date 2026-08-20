@@ -478,6 +478,9 @@ resourcestring
   rsTheD3dhookObjectHasNotBeenCreatedYet = 'The d3dhook object has not been created yet';
   rsD3DHookFailureToOpenTheSharedMemoryObject = 'D3DHook: Failure to open the shared memory object';
   rsD3DHookFailureToMapTheSharedMemoryObject = 'D3DHook: Failure to map the shared memory object';
+  rsD3DHookFailureToCreateTheReadyEvent = 'D3DHook: Failure to create the ready event';
+  rsD3DHookInjectionDidNotBecomeReady = 'D3DHook: The injected library did not become ready in time';
+  rsD3DHookFailureToInstallHooks = 'D3DHook: Failure to install the Direct3D hooks';
 
 procedure TD3DMessageHandler.handleSnapshot;
 begin
@@ -1614,6 +1617,7 @@ begin
 end;
 
 constructor TD3DHook.create(size: integer; hookhwnd: boolean=true);
+const readyTimeout=30000;
 var h: thandle;
     s: TStringList;
 
@@ -1691,48 +1695,53 @@ begin
 
     h:=CreateEventA(nil, true, false, pchar(sharename+'_READY') );
 
-    if (h<>0) then
+    if h=0 then
+      raise exception.create(rsD3DHookFailureToCreateTheReadyEvent)
+    else
     begin
+      try
+        if hookhwnd then
+        begin
+          hasclickevent:=CreateEventA(nil, false, false, pchar(sharename+'_HASCLICK') );
+          hashandledclickevent:=CreateEventA(nil, false, true, pchar(sharename+'_HANDLEDCLICK') );
 
-      if hookhwnd then
-      begin
-        hasclickevent:=CreateEventA(nil, false, false, pchar(sharename+'_HASCLICK') );
-        hashandledclickevent:=CreateEventA(nil, false, true, pchar(sharename+'_HANDLEDCLICK') );
-
-        haskeyboardevent:=CreateEventA(nil, false, false, pchar(sharename+'_HASKEYBOARD') );
-        hashandledkeyboardevent:=CreateEventA(nil, false, true, pchar(sharename+'_HANDLEDKEYBOARD') );
+          haskeyboardevent:=CreateEventA(nil, false, false, pchar(sharename+'_HASKEYBOARD') );
+          hashandledkeyboardevent:=CreateEventA(nil, false, true, pchar(sharename+'_HANDLEDKEYBOARD') );
 
 
-        messagehandler:=TD3DMessageHandler.Create(true);
-        messagehandler.owner:=self;
-        messagehandler.start;
+          messagehandler:=TD3DMessageHandler.Create(true);
+          messagehandler.owner:=self;
+          messagehandler.start;
+        end;
+
+
+        TextureLock:=CreateEventA(nil, false, true, nil);
+        DuplicateHandle(GetCurrentProcess, TextureLock, processhandle, @shared.TextureLock,0, false,DUPLICATE_SAME_ACCESS);
+
+        CommandListLock:=CreateEventA(nil, false, true, nil);
+        DuplicateHandle(GetCurrentProcess, CommandListLock, processhandle, @shared.CommandListLock,0, false,DUPLICATE_SAME_ACCESS);
+
+        SnapshotDone:=CreateEventA(nil, false, false, nil);
+        DuplicateHandle(GetCurrentProcess, SnapshotDone, processhandle, @shared.SnapshotDone,0, false,DUPLICATE_SAME_ACCESS);
+
+        shared.canDoSnapshot:=1;
+
+
+
+        //now inject the dll
+        symhandler.reinitialize;
+        symhandler.waitforsymbolsloaded(true, 'kernel32.dll');
+        if processhandler.is64Bit then
+          injectdll(cheatenginedir+'d3dhook64.dll')
+        else
+          injectdll(cheatenginedir+'d3dhook.dll');
+
+        //wait till the injection is done
+        if WaitForSingleObject(h, readyTimeout)<>WAIT_OBJECT_0 then
+          raise exception.create(rsD3DHookInjectionDidNotBecomeReady);
+      finally
+        closehandle(h);
       end;
-
-
-      TextureLock:=CreateEventA(nil, false, true, nil);
-      DuplicateHandle(GetCurrentProcess, TextureLock, processhandle, @shared.TextureLock,0, false,DUPLICATE_SAME_ACCESS);
-
-      CommandListLock:=CreateEventA(nil, false, true, nil);
-      DuplicateHandle(GetCurrentProcess, CommandListLock, processhandle, @shared.CommandListLock,0, false,DUPLICATE_SAME_ACCESS);
-
-      SnapshotDone:=CreateEventA(nil, false, false, nil);
-      DuplicateHandle(GetCurrentProcess, SnapshotDone, processhandle, @shared.SnapshotDone,0, false,DUPLICATE_SAME_ACCESS);
-
-      shared.canDoSnapshot:=1;
-
-
-
-      //now inject the dll
-      symhandler.reinitialize;
-      symhandler.waitforsymbolsloaded(true, 'kernel32.dll');
-      if processhandler.is64Bit then
-        injectdll(cheatenginedir+'d3dhook64.dll')
-      else
-        injectdll(cheatenginedir+'d3dhook.dll');
-
-      //wait till the injection is done
-      WaitForSingleObject(h, INFINITE);
-      closehandle(h);
 
       //and hook the functions
       //(script: tstrings; address: string; addresstogoto: string; addresstostoreneworiginalfunction: string=''; nameextension:string='0');
@@ -1804,10 +1813,14 @@ begin
        // clipboard.AsText:=s.text;
 
         //if there is a script execute it.
-        if (s.count>0) and (autoassemble(s,false)=false) then
+        if s.count=0 then
+          raise exception.create(rsD3DHookFailureToInstallHooks);
+
+        if autoassemble(s,false)=false then
         begin
           //on error write the script to the clipboard
           clipboard.AsText:=s.text; //debug
+          raise exception.create(rsD3DHookFailureToInstallHooks);
         end;
 
         shared.initialized:=$dbcedbce;
