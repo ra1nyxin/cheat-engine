@@ -378,6 +378,18 @@ LRESULT CALLBACK windowhook(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
 	BOOL hasTextureLock=FALSE;
 	BOOL hasLock=FALSE;
 
+	if ((shared==NULL) || (shared->hookwnd==0))
+	{
+		if (o)
+		{
+			if (GetWindowLongPtrW(hwnd, GWLP_WNDPROC)==(LONG_PTR)windowhook)
+				SetWindowLongPtrW(hwnd, GWLP_WNDPROC, o);
+			originalwndprocs[hwnd]=NULL;
+			return CallWindowProcW((WNDPROC)o, hwnd, uMsg, wParam, lParam);
+		}
+		return DefWindowProcW(hwnd, uMsg, wParam, lParam);
+	}
+
 #ifdef _DEBUG
 	if (called==0)
 	{

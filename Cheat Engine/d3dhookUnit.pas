@@ -1542,7 +1542,24 @@ end;
 
 destructor TD3DHook.Destroy;
 var i: integer;
+  procedure closeEventHandle(var eventHandle: THandle);
+  begin
+    if eventHandle<>0 then
+    begin
+      CloseHandle(eventHandle);
+      eventHandle:=0;
+    end;
+  end;
 begin
+  if shared<>nil then
+  begin
+    shared.hookwnd:=0;
+    shared.console.hasconsole:=0;
+    shared.hasOnKey:=0;
+    if hashandledclickevent<>0 then SetEvent(hashandledclickevent);
+    if hashandledkeyboardevent<>0 then SetEvent(hashandledkeyboardevent);
+  end;
+
   if messagehandler<>nil then
   begin
     messagehandler.terminate;
@@ -1577,6 +1594,14 @@ begin
 
   UnmapViewOfFile(shared);
   closehandle(fmhandle);
+
+  closeEventHandle(hasclickevent);
+  closeEventHandle(hashandledclickevent);
+  closeEventHandle(haskeyboardevent);
+  closeEventHandle(hashandledkeyboardevent);
+  closeEventHandle(SnapshotDone);
+  closeEventHandle(TextureLock);
+  closeEventHandle(CommandListLock);
 
   commandlist.free;
   textures.free;
@@ -1636,6 +1661,23 @@ begin
     DuplicateHandle(processhandle, shared.TextureLock, GetCurrentProcess, @TextureLock, 0, false,DUPLICATE_SAME_ACCESS);
     DuplicateHandle(processhandle, shared.CommandListLock, GetCurrentProcess, @CommandListLock, 0, false,DUPLICATE_SAME_ACCESS);
     DuplicateHandle(processhandle, shared.SnapshotDone, GetCurrentProcess, @SnapshotDone, 0, false,DUPLICATE_SAME_ACCESS);
+
+    if hookhwnd then
+    begin
+      shared.hookwnd:=1;
+      hasclickevent:=OpenEventA(EVENT_MODIFY_STATE or SYNCHRONIZE, false, pchar(sharename+'_HASCLICK'));
+      hashandledclickevent:=OpenEventA(EVENT_MODIFY_STATE or SYNCHRONIZE, false, pchar(sharename+'_HANDLEDCLICK'));
+      haskeyboardevent:=OpenEventA(EVENT_MODIFY_STATE or SYNCHRONIZE, false, pchar(sharename+'_HASKEYBOARD'));
+      hashandledkeyboardevent:=OpenEventA(EVENT_MODIFY_STATE or SYNCHRONIZE, false, pchar(sharename+'_HANDLEDKEYBOARD'));
+
+      if (hasclickevent<>0) and (hashandledclickevent<>0) and
+         (haskeyboardevent<>0) and (hashandledkeyboardevent<>0) then
+      begin
+        messagehandler:=TD3DMessageHandler.Create(true);
+        messagehandler.owner:=self;
+        messagehandler.start;
+      end;
+    end;
 
     beginTextureUpdate;
     renderCommandList^[0].command:=integer(rcEndOfCommandlist); //clear the command list
