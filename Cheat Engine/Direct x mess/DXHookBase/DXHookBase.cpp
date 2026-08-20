@@ -1008,60 +1008,33 @@ HRESULT	__stdcall D3D11_DrawAuto_new(ID3D11DeviceContext *dc)
 	return D3D11_DrawAuto_Original(dc);
 }
 
-int GetDXVersionAndInitDLL(IDXGISwapChain *x, void *device)
+int GetDXVersionAndInitDLL(IDXGISwapChain *x, IUnknown **device)
 {
-
 	ID3D10Device *d10=NULL;
 	ID3D10Device1 *d101=NULL;
 	ID3D11Device *d11=NULL;
-
-	DWORD fl;
-
-
 	int version=0;
 
+	*device=NULL;
 
-	//find what kind of device this is	
+	// The interface determines the API. A D3D11 device can use a 9.x or 10.x
+	// feature level without becoming a D3D9 or D3D10 device.
 	if (SUCCEEDED(x->GetDevice(__uuidof(ID3D11Device), (void**)&d11)))
 	{
-		//D3D11
-		fl=(DWORD)d11->GetFeatureLevel();	
 		version=11;
-		
-		d11->Release();
+		*device=d11;
 	}
 	else
 	if (SUCCEEDED(x->GetDevice(__uuidof(ID3D10Device1), (void**)&d101)))
 	{
-		fl=(DWORD)d101->GetFeatureLevel();
 		version=101;
-		d101->Release();		
+		*device=d101;
 	}
 	else
 	if (SUCCEEDED(x->GetDevice(__uuidof(ID3D10Device), (void**)&d10)))
-	{		
-		version=10;		
-		fl=D3D_FEATURE_LEVEL_10_0;
-		d10->Release();
-	}
-
-	switch (fl)
 	{
-		case D3D_FEATURE_LEVEL_10_0:
-			x->GetDevice(__uuidof(ID3D10Device), (void **)device);
-			version=10;
-			break;
-
-		case D3D_FEATURE_LEVEL_10_1:
-			x->GetDevice(__uuidof(ID3D10Device1), (void **)device);
-			version=101;
-			break;
-
-		case D3D_FEATURE_LEVEL_11_0:
-		case D3D_FEATURE_LEVEL_11_1:
-			x->GetDevice(__uuidof(ID3D11Device), (void **)device);
-			version=11;			
-			break;		
+		version=10;
+		*device=d10;
 	}
 
 
@@ -1125,7 +1098,7 @@ HRESULT __stdcall IDXGISwapChain_ResizeBuffers_new(IDXGISwapChain *x, UINT Buffe
 
 	if (shared)
 	{
-		IUnknown *dev;
+		IUnknown *dev=NULL;
 		int version=GetDXVersionAndInitDLL(x, &dev);
 
 		switch (version)
@@ -1146,7 +1119,7 @@ HRESULT __stdcall IDXGISwapChain_ResizeBuffers_new(IDXGISwapChain *x, UINT Buffe
 				break;
 		}
 
-		if (version)
+		if (dev)
 			dev->Release();
 	}
 
@@ -1160,7 +1133,7 @@ HRESULT __stdcall IDXGISwapChain_Present_new(IDXGISwapChain *x, UINT SyncInterva
 
 	if (shared)	
 	{
-		IUnknown *dev;
+		IUnknown *dev=NULL;
 
 		int version=GetDXVersionAndInitDLL(x, &dev);
 		switch (version)
@@ -1181,7 +1154,7 @@ HRESULT __stdcall IDXGISwapChain_Present_new(IDXGISwapChain *x, UINT SyncInterva
 				break;
 		}
 
-		if (version)
+		if (dev)
 			dev->Release();
 
 		if ((shared->hookwnd) && (shared->lastHwnd))
