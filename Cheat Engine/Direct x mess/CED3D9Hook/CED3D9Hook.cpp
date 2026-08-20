@@ -152,8 +152,10 @@ void DXMessD3D9Handler::TakeSnapshot(char *functionname)
 				x=shared->snapshotImageFormat;
 				WriteFile(h, &x, sizeof(x), &bw, NULL);
 				x=dest->GetBufferSize();
-				WriteFile(h, &x, sizeof(x), &bw, NULL); 													
-				WriteFile(h, dest->GetBufferPointer(), x, &bw, NULL); 
+				WriteFile(h, &x, sizeof(x), &bw, NULL);
+				WriteFile(h, dest->GetBufferPointer(), x, &bw, NULL);
+
+				dest->Release();
 			}
 			else
 			{
@@ -161,8 +163,6 @@ void DXMessD3D9Handler::TakeSnapshot(char *functionname)
 				WriteFile(h, &x, sizeof(x), &bw, NULL);
 				WriteFile(h, &x, sizeof(x), &bw, NULL); 
 			}
-
-			dest->Release();
 
 			WriteFile(h, &stackbase, sizeof(stackbase), &bw, NULL);
 			
