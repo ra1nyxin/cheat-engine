@@ -516,10 +516,6 @@ ID3D11DeviceContext *DXMessD3D11Handler::PrepareForSnapshot(ID3D11DeviceContext 
 			ID3D11DepthStencilView* currentds=NULL;
 			FLOAT f[]={1.0f,0.0f,1.0f,1.0f};
 
-			//dc->OMSetRenderTargets(1, &ExtraRenderTarget, NULL);
-
-			
-			
 			if (!shared->alsoClearDepthBuffer)
 				drawdc->OMGetRenderTargets(1, &currentrt, NULL);
 			else
@@ -1608,35 +1604,8 @@ DXMessD3D11Handler::DXMessD3D11Handler(ID3D11Device *dev, IDXGISwapChain *sc, PD
     hr = dev->CreateRenderTargetView( pBackBuffer, NULL, &pRenderTargetView );
     pBackBuffer->Release();
 
-	DXGI_SWAP_CHAIN_DESC scd;
-	if (SUCCEEDED(sc->GetDesc(&scd)))
-	{
-		D3D11_TEXTURE2D_DESC texdesc;
-		texdesc.ArraySize=1;
-		texdesc.BindFlags=D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE;
-		texdesc.CPUAccessFlags=0;
-		texdesc.Format=DXGI_FORMAT_R8G8B8A8_UNORM;
-		texdesc.Height=scd.BufferDesc.Height;
-		texdesc.Width=scd.BufferDesc.Width;
-		texdesc.MipLevels=1;
-		texdesc.MiscFlags=0;
-		texdesc.SampleDesc.Count=1;
-		texdesc.SampleDesc.Quality=0;
-		texdesc.Usage=D3D11_USAGE_DEFAULT;
-		
-		if (SUCCEEDED(dev->CreateTexture2D(&texdesc, NULL, &ExtraRenderTargetTexture)))
-		{
-			ExtraRenderTarget=NULL;
-			dev->CreateRenderTargetView(ExtraRenderTargetTexture, NULL,  &ExtraRenderTarget);
-
-		}		
-		
-	}
-
-
-
-    if( FAILED( hr ) )
-        return;
+	if( FAILED( hr ) )
+		return;
 
 
 	DXGI_SWAP_CHAIN_DESC scdesc;
@@ -2260,15 +2229,11 @@ void __stdcall D3D11Hook_SwapChain_Present_imp(IDXGISwapChain *swapchain, ID3D11
 			dc->OMGetRenderTargets(1, &rt, NULL);
 
 
-			//currenthandler->dc->OMSetRenderTargets(1, &currenthandler->ExtraRenderTarget, NULL);
-
-
-
 			//clear the render target with a specific color
 			if (rt)
 			{
 				FLOAT f[]={1.0f,0.0f,1.0f,1.0f};
-				dc->ClearRenderTargetView(currenthandler->ExtraRenderTarget, f);	
+				dc->ClearRenderTargetView(rt, f);
 				
 				rt->Release();
 			}

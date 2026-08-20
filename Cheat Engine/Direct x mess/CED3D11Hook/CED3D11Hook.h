@@ -70,9 +70,6 @@ public:
 	ID3D11RasterizerState *pWireframeRasterizer;
 	ID3D11DepthStencilState *pDisabledDepthStencilState;
 
-	ID3D11Texture2D *ExtraRenderTargetTexture;
-	ID3D11RenderTargetView *ExtraRenderTarget;
-
 	DXMessD3D11Handler(ID3D11Device *dev, IDXGISwapChain *sc, PD3DHookShared s);
 	~DXMessD3D11Handler();
 	void RenderOverlay();
