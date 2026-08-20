@@ -6,6 +6,7 @@
 
 
 using namespace std;
+using namespace DirectX;
 map<IDXGISwapChain *, DXMessD3D11Handler *> D3D11devices;
 CRITICAL_SECTION D3D11DeviceLock;
 

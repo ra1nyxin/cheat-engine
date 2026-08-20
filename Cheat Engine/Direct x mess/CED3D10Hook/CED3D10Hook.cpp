@@ -4,6 +4,7 @@
 #include "stdafx.h"
 
 using namespace std;
+using namespace DirectX;
 map<IDXGISwapChain *, DXMessD3D10Handler *> D3D10devices;
 CRITICAL_SECTION D3D10DeviceLock;
 

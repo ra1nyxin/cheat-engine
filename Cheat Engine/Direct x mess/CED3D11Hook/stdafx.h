@@ -13,7 +13,7 @@
 #include <d3d11.h>
 #include <d3dx11.h>
 #include <d3dcompiler.h>
-#include <xnamath.h>
+#include <DirectXMath.h>
 #include <map>
 #include "..\d3dhookshared.h"
 #include "CED3D11Hook.h"

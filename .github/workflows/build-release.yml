@@ -161,7 +161,7 @@ jobs:
           $common = @(
             'Cheat Engine\Direct x mess\Direct x mess.sln',
             '/t:Rebuild',
-            '/m',
+            '/m:1',
             '/p:Configuration=Release',
             '/p:PlatformToolset=v143',
             "/p:ForceImportBeforeCppTargets=$d3dxTargets"

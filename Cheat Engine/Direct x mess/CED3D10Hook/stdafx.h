@@ -14,7 +14,7 @@
 #include <d3d10.h>
 #include <d3dx10.h>
 #include <d3dcompiler.h>
-#include <xnamath.h>
+#include <DirectXMath.h>
 #include <map>
 #include "..\d3dhookshared.h"
 #include "CED3D10Hook.h"
