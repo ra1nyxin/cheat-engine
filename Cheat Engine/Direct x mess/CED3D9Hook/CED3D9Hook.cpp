@@ -12,6 +12,18 @@ int insidehook;
 
 BOOL makeSnapshot=FALSE; //duplicate variable to be used as a hint that one of the devices is making a snapshot. (in case of multiple devices)
 
+void UpdateD3D9SnapshotState()
+{
+	makeSnapshot=FALSE;
+	map<IDirect3DDevice9 *, DXMessD3D9Handler *>::iterator i;
+	for (i=D3D9devices.begin(); i!=D3D9devices.end(); i++)
+		if (i->second && i->second->makeSnapshot)
+		{
+			makeSnapshot=TRUE;
+			break;
+		}
+}
+
 
 
 void DXMessD3D9Handler::PrepareForSnapshot() //just clears the screen
@@ -21,7 +33,7 @@ void DXMessD3D9Handler::PrepareForSnapshot() //just clears the screen
 		if (!shared->alsoClearDepthBuffer)
 			dev->Clear(0, NULL, D3DCLEAR_TARGET, 0xFFFF00FF, 0.0f, 0);
 		else
-			dev->Clear(0, NULL, D3DCLEAR_TARGET, 0xFFFF00FF, 1.0f, 0);
+			dev->Clear(0, NULL, D3DCLEAR_TARGET | D3DCLEAR_ZBUFFER, 0xFFFF00FF, 1.0f, 0);
 	}
 }
 
@@ -846,6 +858,7 @@ DXMessD3D9Handler::DXMessD3D9Handler(IDirect3DDevice9 *dev, PD3DHookShared share
 DXMessD3D9Handler::~DXMessD3D9Handler()
 {
 	D3D9devices[dev]=NULL;
+	UpdateD3D9SnapshotState();
 }
 	
 void __stdcall D3D9Hook_Present_imp(IDirect3DDevice9 *device, PD3DHookShared s)
@@ -931,10 +944,6 @@ void __stdcall D3D9Hook_Present_imp(IDirect3DDevice9 *device, PD3DHookShared s)
 
 		if (currenthandler->makeSnapshot)
 		{
-
-			makeSnapshot=TRUE; //once true, always true
-
-			
 			//clear the render target with a specific color
 			currenthandler->dev->Clear(0, NULL, D3DCLEAR_TARGET, 0xFFFF00FF, 1.0f, 0);
 			
@@ -943,7 +952,9 @@ void __stdcall D3D9Hook_Present_imp(IDirect3DDevice9 *device, PD3DHookShared s)
 
 		}
 	}
-	
+
+	UpdateD3D9SnapshotState();
+
 }
 
 HRESULT __stdcall D3D9Hook_Reset_imp(D3D9_RESET_ORIGINAL originalfunction, IDirect3DDevice9 *device, D3DPRESENT_PARAMETERS *pPresentationParameters)
@@ -983,7 +994,11 @@ HRESULT __stdcall D3D9Hook_DrawPrimitive_imp(D3D9_DRAWPRIMITIVE_ORIGINAL origina
 
 		if (SUCCEEDED(hr) && SUCCEEDED(hr2))
 		{			
-			device->SetRenderState(D3DRS_FILLMODE,D3DFILL_WIREFRAME);
+			if (shared->wireframe)
+				device->SetRenderState(D3DRS_FILLMODE,D3DFILL_WIREFRAME);
+
+			if (shared->disabledzbuffer)
+				device->SetRenderState(D3DRS_ZENABLE,FALSE);
 			hr=originalfunction(device, PrimitiveType, StartVertex, PrimitiveCount);
 			device->SetRenderState(D3DRS_FILLMODE,oldfillmode);
 			device->SetRenderState(D3DRS_ZENABLE,oldzenable);

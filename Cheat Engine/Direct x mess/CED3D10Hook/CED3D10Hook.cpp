@@ -34,6 +34,18 @@ __declspec(thread) int insidehook=0;
 
 BOOL makeSnapshot=FALSE; //duplicate variable to be used as a hint that one of the devices is making a snapshot. (in case of multiple devices)
 
+void UpdateD3D10SnapshotState()
+{
+	makeSnapshot=FALSE;
+	map<IDXGISwapChain *, DXMessD3D10Handler *>::iterator i;
+	for (i=D3D10devices.begin(); i!=D3D10devices.end(); i++)
+		if (i->second && i->second->makeSnapshot)
+		{
+			makeSnapshot=TRUE;
+			break;
+		}
+}
+
 
 //definitions
 struct SpriteVertex{
@@ -1446,6 +1458,7 @@ void __stdcall D3D10Hook_SwapChain_ResizeBuffers_imp(IDXGISwapChain *swapchain, 
 		device->ClearState();
 		delete(currentDevice);
 	}
+	UpdateD3D10SnapshotState();
 
 	
 
@@ -1533,9 +1546,6 @@ void __stdcall D3D10Hook_SwapChain_Present_imp(IDXGISwapChain *swapchain, ID3D10
 		if (currentDevice->makeSnapshot)
 		{
 			ID3D10RenderTargetView *rt=NULL;
-			makeSnapshot=TRUE; //once true, always true
-
-			
 			currentDevice->dev->OMGetRenderTargets(1, &rt, NULL);
 
 			//clear the render target with a specific color
@@ -1551,6 +1561,7 @@ void __stdcall D3D10Hook_SwapChain_Present_imp(IDXGISwapChain *swapchain, ID3D10
 
 		}
 	}
+	UpdateD3D10SnapshotState();
 	
 
 }

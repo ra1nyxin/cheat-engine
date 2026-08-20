@@ -35,6 +35,18 @@ __declspec(thread) int insidehook=0;
 PD3DHookShared shared;
 BOOL makeSnapshot;
 
+void UpdateD3D11SnapshotState()
+{
+	makeSnapshot=FALSE;
+	map<IDXGISwapChain *, DXMessD3D11Handler *>::iterator i;
+	for (i=D3D11devices.begin(); i!=D3D11devices.end(); i++)
+		if (i->second && i->second->makeSnapshot)
+		{
+			makeSnapshot=TRUE;
+			break;
+		}
+}
+
 //definitions
 struct SpriteVertex{
     XMFLOAT3 Pos;
@@ -2136,6 +2148,7 @@ void __stdcall D3D11Hook_SwapChain_ResizeBuffers_imp(IDXGISwapChain *swapchain, 
 		//currentDevice->dc->ClearState();
 		delete(currentDevice);
 	}
+	UpdateD3D11SnapshotState();
 }
 
 
@@ -2223,9 +2236,6 @@ void __stdcall D3D11Hook_SwapChain_Present_imp(IDXGISwapChain *swapchain, ID3D11
 			ID3D11DeviceContext *dc;
 			ID3D11RenderTargetView *rt=NULL;
 			device->GetImmediateContext(&dc);
-			makeSnapshot=TRUE; //once true, always true
-
-			
 			dc->OMGetRenderTargets(1, &rt, NULL);
 
 
@@ -2244,6 +2254,7 @@ void __stdcall D3D11Hook_SwapChain_Present_imp(IDXGISwapChain *swapchain, ID3D11
 
 		}
 	}
+	UpdateD3D11SnapshotState();
 
 }
 
