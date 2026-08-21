@@ -1446,17 +1446,19 @@ begin
   if not stopped then
   begin
     ObtainLock;
-    c:=3;
-    timeout:=10;
+    try
+      c:=3;
+      timeout:=10;
 
-    repeat
-      fpsend(socket, @c,1,0);
-      stoptargetused:=true;
-      s:=receivePacket(1000,true);
-      dec(timeout);
-    until stopped or (timeout=0);
-
-    ReleaseLock;
+      repeat
+        fpsend(socket, @c,1,0);
+        stoptargetused:=true;
+        s:=receivePacket(1000,true);
+        dec(timeout);
+      until stopped or (timeout=0);
+    finally
+      ReleaseLock;
+    end;
     result:=stopped;
   end;
 end;
@@ -2711,29 +2713,37 @@ var
   wasstopped: boolean;
 begin
   OutputDebugString('TGDBServerDebuggerInterface.DebugActiveProcessStop');
+  result:=false;
 
-  ObtainLock;
-  OutputDebugString('got lock');
+  try
+    ObtainLock;
+    try
+      OutputDebugString('got lock');
+      stoptarget(wasstopped);
 
-  stoptarget(wasstopped);
+      OutputDebugString('stopped target. Sending ''D''');
+      result:=sendPacket('D');
+    finally
+      ReleaseLock;
+      OutputDebugString('released lock');
+    end;
+  finally
+    if (socket<>0) and (socket<>cint(INVALID_SOCKET)) then
+    begin
+      {$ifdef windows}
+      closesocket(socket);
+      {$else}
+      fpclose(socket);
+      {$endif}
+    end;
+    socket:=cint(INVALID_SOCKET);
 
-  OutputDebugString('stopped target. Sending ''D''');
-  sendPacket('D');
-
-  ReleaseLock;
-  OutputDebugString('released lock');
-  {$ifdef windows}
-  closehandle(socket);
-  {$else}
-  fpclose(socket);
-  {$endif}
-
-  if gdbserverExecutor<>nil then
-  begin
-    OutputDebugString('terminating gdbserverExecutor');
-    gdbserverExecutor.Terminate;
+    if gdbserverExecutor<>nil then
+    begin
+      OutputDebugString('terminating gdbserverExecutor');
+      gdbserverExecutor.Terminate;
+    end;
   end;
-
 end;
 
 procedure TGDBServerDebuggerInterface.AddToNoBreakList(threadid: integer);
