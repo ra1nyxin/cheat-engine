@@ -837,10 +837,11 @@ function TGDBServerDebuggerInterface.writeBytes(address: ptruint; data: pointer;
 var
   s,r: string;
   wasstopped: boolean;
-  hexstr: pchar;
+  hexstr: pchar=nil;
 
   bytesleft: integer;
   blocksize: integer;
+  packetheader: string;
 begin
   result:=false;
   ObtainLock;
@@ -856,20 +857,33 @@ begin
     result:=true;
     while result and (bytesleft>0) do
     begin
-      blocksize:=min(maxpacketsize, bytesleft);
-      s:='M'+inttohex(address,1)+','+inttohex(blocksize,1)+':';
+      blocksize:=min(bytesleft, max(1, (maxpacketsize-32) div 2));
+      repeat
+        packetheader:='M'+inttohex(address,1)+','+inttohex(blocksize,1)+':';
+        if length(packetheader)+blocksize*2<=maxpacketsize then
+          break;
+
+        dec(blocksize);
+      until blocksize=0;
+
+      if blocksize=0 then
+        exit(false);
+
       getmem(hexstr,blocksize*2+1);
-      BinToHex(data, hexstr,size);
-      hexstr[blocksize*2]:=#0;
-      s:=s+hexstr;
+      try
+        BinToHex(data, hexstr,blocksize);
+        hexstr[blocksize*2]:=#0;
+        s:=packetheader+hexstr;
+      finally
+        freememandnil(hexstr);
+      end;
 
       sendPacket(s);
       r:=receivePacket(1000);
       result:=r='OK';
 
-      freemem(hexstr);
-
       inc(address, blocksize);
+      inc(data, blocksize);
       dec(bytesleft, blocksize);
     end;
 
@@ -3118,4 +3132,3 @@ end;
 
 
 end.
-
