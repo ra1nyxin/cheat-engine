@@ -1061,6 +1061,7 @@ begin
       begin
         breakpoints[i]:=bp;
         result:=i;
+        break;
       end;
 
     if result=-1 then
@@ -1099,6 +1100,7 @@ begin
       begin
         breakpoints[i]:=bp;
         result:=i;
+        break;
       end;
 
     if result=-1 then
@@ -1147,6 +1149,7 @@ begin
       begin
         breakpoints[i]:=bp;
         result:=i;
+        break;
       end;
 
     if result=-1 then
