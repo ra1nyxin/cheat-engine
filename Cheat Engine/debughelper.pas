@@ -3542,7 +3542,18 @@ begin
   if breakpointlist <> nil then
   begin
     for i := 0 to breakpointlist.Count - 1 do
+    begin
+      if PBreakpoint(breakpointlist.Items[i])^.owner=nil then
+      begin
+        if PBreakpoint(breakpointlist.Items[i])^.FoundcodeDialog<>nil then
+          PBreakpoint(breakpointlist.Items[i])^.FoundcodeDialog.DebuggerDetached;
+
+        if PBreakpoint(breakpointlist.Items[i])^.frmchangedaddresses<>nil then
+          PBreakpoint(breakpointlist.Items[i])^.frmchangedaddresses.DebuggerDetached;
+      end;
+
       freemem(breakpointlist.Items[i]);
+    end;
 
     FreeAndNil(breakpointlist);
   end;

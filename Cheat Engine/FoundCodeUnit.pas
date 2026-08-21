@@ -175,6 +175,7 @@ type
     seenAddressList: TMap; //list for the debugger thread to determine if it should be added to the list
 
     procedure AddRecord;
+    procedure DebuggerDetached;
     procedure setChangedAddressCount(address :ptruint);
     property debuggerinterfacewatchid: integer read fdebuggerinterfacewatchid write setdebuggerinterfacewatchid;
   end;
@@ -1384,6 +1385,12 @@ begin
   else close;
 
 
+end;
+
+procedure TFoundCodeDialog.DebuggerDetached;
+begin
+  breakpoint:=nil;
+  btnOK.caption:=strClose;
 end;
 
 procedure TFoundCodeDialog.FormClose(Sender: TObject;

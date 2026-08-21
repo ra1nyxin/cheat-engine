@@ -194,6 +194,7 @@ type
 
     procedure clearFilter;
     procedure AddRecord;
+    procedure DebuggerDetached;
     property address: ptruint read fAddress write setAddress;
     property debuggerinterfacewatchid: integer read fdebuggerinterfacewatchid write setdebuggerinterfacewatchid;
   end;
@@ -542,6 +543,12 @@ begin
   else
     close;
 
+end;
+
+procedure TfrmChangedAddresses.DebuggerDetached;
+begin
+  breakpoint:=nil;
+  OKButton.Caption:=rsClose;
 end;
 
 procedure TfrmChangedAddresses.micbShowAsHexadecimalClick(Sender: TObject);
