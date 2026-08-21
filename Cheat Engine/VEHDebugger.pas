@@ -697,7 +697,7 @@ var
 begin
   result:=false;
 
-  if active and (processhandler.processid=processhandler.processid) then
+  if active and (processhandler.processid=dwProcessID) then
   begin
     try
       if is64Bit then

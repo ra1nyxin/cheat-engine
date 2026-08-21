@@ -10319,10 +10319,10 @@ begin
                 oldpid := ProcessHandler.processid;
                 oldphandle := processhandler.processhandle;
 
-                ProcessHandler.processid := newPID;
                 unpause;
                 DetachIfPossible;
 
+                ProcessHandler.processid := newPID;
 
 
                 MainForm.ProcessLabel.Caption := pl.strings[j];
