@@ -214,11 +214,13 @@ var
   f: Tfrmchangedaddresses;
 begin
   TDebuggerthread(debuggerthread).execlocation:=44;
+  f:=currentbp^.frmchangedaddresses;
+  if f=nil then exit;
+
   {$ifdef darwin}
   outputdebugstring('frmchangedaddresses_AddRecord: Evaluating '+f.equation);
   {$endif}
 
-  f:=currentbp^.frmchangedaddresses;
   address:=symhandler.getAddressFromName(f.equation, false, haserror, context);
 
   if not haserror then
