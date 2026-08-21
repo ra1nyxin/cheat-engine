@@ -1034,7 +1034,8 @@ begin
   if stopped and stoptargetused then
   begin
     //check the stoppacket to see if it was due to a manual stop or if a breakpoint triggered before it stopped
-    exit(stoppacket.Contains('metype:5') or stoppacket.Contains('reason:exception'));
+    exit((stoppacket='S02') or stoppacket.StartsWith('T02') or
+         stoppacket.Contains('metype:5') or stoppacket.Contains('reason:exception'));
 
   end;
 end;
