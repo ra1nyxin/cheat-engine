@@ -309,6 +309,7 @@ var i: integer;
     h: THandle;
 
     r:dword;
+    parametercount: dword;
 begin
   currentThread:=0;  //just making sure
 
@@ -458,9 +459,12 @@ begin
           lpDebugEvent.Exception.ExceptionRecord.ExceptionFlags:=VEHDebugView.Exception64.ExceptionFlags;
           lpDebugEvent.Exception.ExceptionRecord.ExceptionRecord:=pointer(VEHDebugView.Exception64.ExceptionRecord);
           lpDebugEvent.Exception.ExceptionRecord.ExceptionAddress:=pointer(VEHDebugView.Exception64.ExceptionAddress);
-          lpDebugEvent.Exception.ExceptionRecord.NumberParameters:=VEHDebugView.Exception64.NumberParameters;
+          parametercount:=VEHDebugView.Exception64.NumberParameters;
+          if parametercount>length(lpDebugEvent.Exception.ExceptionRecord.ExceptionInformation) then
+            parametercount:=length(lpDebugEvent.Exception.ExceptionRecord.ExceptionInformation);
 
-          for i:=0 to VEHDebugView.Exception64.NumberParameters-1 do
+          lpDebugEvent.Exception.ExceptionRecord.NumberParameters:=parametercount;
+          for i:=0 to integer(parametercount)-1 do
             lpDebugEvent.Exception.ExceptionRecord.ExceptionInformation[i]:=VEHDebugView.Exception64.ExceptionInformation[i];
         end
         else
@@ -470,9 +474,12 @@ begin
           lpDebugEvent.Exception.ExceptionRecord.ExceptionFlags:=VEHDebugView.Exception32.ExceptionFlags;
           lpDebugEvent.Exception.ExceptionRecord.ExceptionRecord:=pointer(ptrUint(VEHDebugView.Exception32.ExceptionRecord));
           lpDebugEvent.Exception.ExceptionRecord.ExceptionAddress:=pointer(ptrUint(VEHDebugView.Exception32.ExceptionAddress));
-          lpDebugEvent.Exception.ExceptionRecord.NumberParameters:=VEHDebugView.Exception32.NumberParameters;
+          parametercount:=VEHDebugView.Exception32.NumberParameters;
+          if parametercount>length(lpDebugEvent.Exception.ExceptionRecord.ExceptionInformation) then
+            parametercount:=length(lpDebugEvent.Exception.ExceptionRecord.ExceptionInformation);
 
-          for i:=0 to VEHDebugView.Exception32.NumberParameters-1 do
+          lpDebugEvent.Exception.ExceptionRecord.NumberParameters:=parametercount;
+          for i:=0 to integer(parametercount)-1 do
             lpDebugEvent.Exception.ExceptionRecord.ExceptionInformation[i]:=VEHDebugView.Exception32.ExceptionInformation[i];
         end;
 
