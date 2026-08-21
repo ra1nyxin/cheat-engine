@@ -2770,11 +2770,14 @@ begin
   receive(@l,sizeof(l));
   if l=0 then exit('');
 
-  getmem(r,l);
-  receive(r,l);
-  r[l]:=#0;
-  result:=r;
-  freemem(r);
+  getmem(r,l+1);
+  try
+    receive(r,l);
+    r[l]:=#0;
+    result:=r;
+  finally
+    freemem(r);
+  end;
 end;
 
 constructor TCEConnection.create;
