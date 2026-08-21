@@ -1820,17 +1820,30 @@ begin
       {$ifdef DEBUG}
       Messagebox(0,rsDebugHandleAccessViolationDebugEventNow,rsSpecialCase,0);
       {$endif}
-      for i:=0 to temporaryDisabledExceptionBreakpoints.Count-1 do
-      begin
+      try
+        for i:=0 to temporaryDisabledExceptionBreakpoints.Count-1 do
+        begin
+          bp:=PBreakpoint(temporaryDisabledExceptionBreakpoints[i]);
+          if not bp^.markedfordeletion then
+            TdebuggerThread(debuggerthread).setBreakpoint(bp);
+        end;
+      finally
+        for i:=0 to temporaryDisabledExceptionBreakpoints.Count-1 do
+        begin
+          bp:=PBreakpoint(temporaryDisabledExceptionBreakpoints[i]);
+          dec(bp^.referencecount); //decrease referencecount so they can be deleted
+        end;
 
-        bp:=PBreakpoint(temporaryDisabledExceptionBreakpoints[i]);
-        if not bp^.markedfordeletion then
-          TdebuggerThread(debuggerthread).setBreakpoint(bp);
+        freeandnil(temporaryDisabledExceptionBreakpoints);
+        SuspendThread(handle);
 
-        dec(bp^.referencecount); //decrease referencecount so they can be deleted
+        {$ifdef darwin}
+        task_resume(processhandle);
+        {$endif}
+        {$ifdef windows}
+        NtResumeProcess(processhandle);
+        {$endif}
       end;
-
-      freeandnil(temporaryDisabledExceptionBreakpoints);
       exit;   //raise the exception in the game and let it crash
     end
     else
