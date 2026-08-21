@@ -1502,7 +1502,7 @@ var s: string;
   signals: string;
   keyvalue: TStringArray;
   v: string;
-  i,j: integer;
+  i,j, exitcode: integer;
 
   sa: TStringArray;
 
@@ -1837,9 +1837,11 @@ begin
         'W','X': //process exit
         begin
           lpDebugEvent.dwDebugEventCode:=EXIT_PROCESS_DEBUG_EVENT;
-          s2:=copy(stoppacket,2);
-          s2:=s2.Split([';'])[1];
-          lpDebugEvent.ExitProcess.dwExitCode:=Swap(strtoint(copy(s2,2)));
+          exitcode:=0;
+          if (length(stoppacket)<3) or
+             not TryStrToInt('$'+copy(stoppacket,2,2), exitcode) then
+            OutputDebugString(PChar('Invalid GDB process exit packet: '+stoppacket));
+          lpDebugEvent.ExitProcess.dwExitCode:=dword(exitcode);
           exit(true);
         end;
       {
