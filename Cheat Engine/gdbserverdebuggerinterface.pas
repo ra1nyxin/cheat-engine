@@ -2030,7 +2030,10 @@ var
   oldcontext: pbyte;
   d: dword;
   rl: PContextElementRegisterList;
+  contextread: boolean;
 begin
+  result:=false;
+  contextread:=false;
   ObtainLock;
   breakIfNeeded;
   try
@@ -2038,6 +2041,8 @@ begin
     begin
       sendPacket('g;thread:'+hThread.ToHexString);
       r:=receivePacket;
+      r:=StringReplace(r,'x','0',[rfReplaceAll]);
+      contextread:=HexToBin(pchar(r),pchar(lpcontext),gdbcontextHandler.ContextSize)=gdbcontextHandler.ContextSize;
     end
     else
     begin
@@ -2046,25 +2051,35 @@ begin
       r:=receivePacket;
 
       if r<>'OK' then
-        OutputDebugString(pchar('GetThreadContext: Setting thread to '+hThread.ToHexString+' failed'));
+        OutputDebugString(pchar('GetThreadContext: Setting thread to '+hThread.ToHexString+' failed'))
+      else
+        contextread:=true;
 
       ZeroMemory(lpContext, gdbcontextHandler.ContextSize);
       rl:=gdbcontextHandler.getGeneralPurposeRegisters;
       for i:=0 to length(rl^)-1 do
       begin
+        if not contextread then
+          break;
+
         sendPacket('p'+inttohex(rl^[i].internalidentifier,2));
         r:=receivePacket;
-        if r<>'' then
-          HexToBin(pchar(r), pchar(@rl^[i].ContextOffset), rl^[i].size);
+        r:=StringReplace(r,'x','0',[rfReplaceAll]);
+        contextread:=(r<>'') and
+                     (HexToBin(pchar(r), rl^[i].getPointer(lpContext), rl^[i].size)=rl^[i].size);
       end;
 
       rl:=gdbcontextHandler.getFloatingPointRegisters;
       for i:=0 to length(rl^)-1 do
       begin
+        if not contextread then
+          break;
+
         sendPacket('p'+inttohex(rl^[i].internalidentifier,2));
         r:=receivePacket;
-        if r<>'' then
-          HexToBin(pchar(r), pchar(@rl^[i].ContextOffset), rl^[i].size);
+        r:=StringReplace(r,'x','0',[rfReplaceAll]);
+        contextread:=(r<>'') and
+                     (HexToBin(pchar(r), rl^[i].getPointer(lpContext), rl^[i].size)=rl^[i].size);
       end;
     end;
 
@@ -2073,18 +2088,15 @@ begin
     ReleaseLock;
   end;
 
-  r:=StringReplace(r,'x','0',[rfReplaceAll]);
-  i:=HexToBin(pchar(r),pchar(lpcontext),gdbcontextHandler.ContextSize);
+  result:=contextread;
 
-  if oldcontexts.HasId(hthread)=false then
+  if result and (oldcontexts.HasId(hthread)=false) then
   begin
     getmem(oldcontext, gdbcontextHandler.ContextSize);
     copymemory(oldcontext,lpContext,gdbcontextHandler.ContextSize);
     d:=hthread;
     oldcontexts.Add(d,oldcontext);
   end;
-
-  result:=i=gdbcontextHandler.ContextSize;
 end;
 
 function TGDBServerDebuggerInterface.allocateMemory(size: integer; protections: string): ptruint;
