@@ -949,6 +949,14 @@ var
 
   compressedbuffer: tmemorystream;
   d: Tdecompressionstream;
+
+  procedure rejectInvalidResponse;
+  begin
+    fConnected:=false;
+    if socket<>0 then
+      CloseSocket(socket);
+    socket:=0;
+  end;
 begin
   result:=false;
   lpNumberOfBytesRead:=0;
@@ -969,6 +977,13 @@ begin
     begin
       if receive(@compressedresult, sizeof(compressedresult))>0 then
       begin
+        if (compressedresult.uncompressedsize>nSize) or
+           (qword(compressedresult.compressedsize)>qword(nSize)*2+65536) then
+        begin
+          rejectInvalidResponse;
+          exit(false);
+        end;
+
         compressedbuffer:=tmemorystream.create;
         try
           compressedbuffer.Size:=compressedresult.compressedsize;
@@ -999,6 +1014,12 @@ begin
       begin
         if output.bytesread>0 then
         begin
+          if qword(output.bytesread)>nSize then
+          begin
+            rejectInvalidResponse;
+            exit(false);
+          end;
+
           if receive(lpBuffer, output.bytesread)>0 then
           begin
             result:=true;
