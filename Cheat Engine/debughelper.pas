@@ -2389,10 +2389,12 @@ var
   mi: tmoduleinfo;
   startModuleBase: ptruint;
   startModuleSize: dword;
+  processSuspended: boolean;
 begin
   debuggercs.enter;
   try
     setlength(bplist,0);
+    processSuspended:=false;
 
     if CurrentDebuggerInterface is TGDBServerDebuggerInterface then
       breakpointmethod:=bpmGDB;
@@ -2426,39 +2428,40 @@ begin
     if startcondition<>'' then
     begin
       {$ifdef darwin}
-      task_suspend(processhandle);
+      processSuspended:=task_suspend(processhandle)=0;
       {$endif}
       {$ifdef windows}
-      if assigned(ntSuspendProcess) then
-        ntSuspendProcess(processhandle);
+      if assigned(ntSuspendProcess) and assigned(ntResumeProcess) then
+        processSuspended:=ntSuspendProcess(processhandle)=0;
       {$endif}
     end;
 
-    if stayInsideModule then
-    begin
-      if symhandler.getmodulebyaddress(address, mi) then
+    try
+      if stayInsideModule then
       begin
-        startModuleBase:=mi.baseaddress;
-        startModuleSize:=mi.basesize;
-      end
-      else
-        stayInsideModule:=false;
-    end;
+        if symhandler.getmodulebyaddress(address, mi) then
+        begin
+          startModuleBase:=mi.baseaddress;
+          startModuleSize:=mi.basesize;
+        end
+        else
+          stayInsideModule:=false;
+      end;
 
-    bp:=AddBreakpoint(nil, address, bpsize, BreakpointTrigger, breakpointmethod, bo_BreakAndTrace, usedDebugRegister,  nil, 0, nil,frmTracer,count);
+      bp:=AddBreakpoint(nil, address, bpsize, BreakpointTrigger, breakpointmethod, bo_BreakAndTrace, usedDebugRegister,  nil, 0, nil,frmTracer,count);
 
-    if startcondition<>'' then
-    begin
-      if bp<>nil then
+      if (startcondition<>'') and (bp<>nil) then
         setbreakpointcondition(bp, true, startcondition);
-
+    finally
+      if processSuspended then
+      begin
       {$ifdef darwin}
-      task_resume(processhandle);
+        task_resume(processhandle);
       {$endif}
       {$ifdef windows}
-      if assigned(ntResumeProcess) then
         ntResumeProcess(processhandle);
       {$endif}
+      end;
     end;
 
     if bp<>nil then
