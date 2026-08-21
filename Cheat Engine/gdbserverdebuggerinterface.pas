@@ -634,6 +634,19 @@ begin
       begin
         if not waitForData(0) then break; //nothing left to read at the moment (might have more later)
         i:=fprecv(socket, buf,4096,0);
+        if i<=0 then
+        begin
+          if socket<>0 then
+          begin
+            {$ifdef windows}
+            closesocket(socket);
+            {$else}
+            fpclose(socket);
+            {$endif}
+            socket:=0;
+          end;
+          exit;
+        end;
 
         if binaryReceiveBufferPos+i>=binaryReceiveBufferMax then
         begin
@@ -644,8 +657,7 @@ begin
         copymemory(@binaryReceiveBuffer[binaryReceiveBufferPos], buf, i);
         inc(binaryReceiveBufferPos,i);
 
-        if i>0 then
-          receivedData:=true;
+        receivedData:=true;
         //find a buffer inside the receiveBuffer and if found, return it as a result (and ack)
       end;
 
