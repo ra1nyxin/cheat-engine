@@ -18,7 +18,7 @@ uses
   macport, macportdefines,coresymbolication, macexceptiondebuggerinterface,
   macCreateRemoteThread, macumm, machotkeys, macPipe,
   {$endif}
-  betterControls, controls, sysutils, Forms, LazUTF8, dialogs, SynCompletion,
+  betterControls, controls, sysutils, Forms, ExtCtrls, LazUTF8, dialogs, SynCompletion,
   MainUnit, CEDebugger, NewKernelHandler, CEFuncProc, ProcessHandlerUnit,
   symbolhandler, Assemblerunit, hypermode, byteinterpreter, addressparser,
   autoassembler, ProcessWindowUnit, MainUnit2, Filehandler,
@@ -143,33 +143,74 @@ uses
 {$R Images.res}
 {$endif}
 
-{$ifdef windows}
-function SystemFunction036(RandomBuffer: Pointer; RandomBufferLength: Cardinal): LongBool; stdcall; external 'advapi32.dll';
-{$endif}
+type
+  TWindowTitleUpdater=class
+  private
+    FTimer: TTimer;
+    procedure TimerTick(Sender: TObject);
+  public
+    constructor Create;
+    destructor Destroy; override;
+  end;
+
+var
+  WindowTitleRandomState: Cardinal;
+
+procedure InitializeWindowTitleRandomState;
+var
+  Ticks: QWord;
+begin
+  Ticks:=GetTickCount64;
+  WindowTitleRandomState:=Cardinal(Ticks) xor Cardinal(Ticks shr 32) xor
+    Cardinal(PtrUInt(@WindowTitleRandomState));
+  if WindowTitleRandomState=0 then
+    WindowTitleRandomState:=$a341316c;
+end;
+
+function NextWindowTitleRandom: Cardinal;
+begin
+  Result:=WindowTitleRandomState;
+  Result:=Result xor (Result shl 13);
+  Result:=Result xor (Result shr 17);
+  Result:=Result xor (Result shl 5);
+  WindowTitleRandomState:=Result;
+end;
 
 function GenerateRandomWindowTitle: string;
 const
   TitleCharacters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
 var
-  RandomBytes: array[0..20] of Byte;
   I, TitleLength: Integer;
 begin
-  {$ifdef windows}
-  if SystemFunction036(@RandomBytes, SizeOf(RandomBytes)) then
-  begin
-    TitleLength := 6 + (RandomBytes[0] mod 15);
-    SetLength(Result, TitleLength);
-    for I := 1 to TitleLength do
-      Result[I] := TitleCharacters[1 + (RandomBytes[I] mod Length(TitleCharacters))];
-    Exit;
-  end;
-  {$endif}
-
-  Randomize;
-  TitleLength := 6 + Random(15);
+  TitleLength:=6+Integer(NextWindowTitleRandom mod 15);
   SetLength(Result, TitleLength);
-  for I := 1 to TitleLength do
-    Result[I] := TitleCharacters[1 + Random(Length(TitleCharacters))];
+  for I:=1 to TitleLength do
+    Result[I]:=TitleCharacters[1+(NextWindowTitleRandom mod Length(TitleCharacters))];
+end;
+
+procedure TWindowTitleUpdater.TimerTick(Sender: TObject);
+var
+  NewTitle: string;
+begin
+  NewTitle:=GenerateRandomWindowTitle;
+  Application.Title:=NewTitle;
+  if MainForm<>nil then
+    MainForm.Caption:=NewTitle;
+end;
+
+constructor TWindowTitleUpdater.Create;
+begin
+  inherited Create;
+  FTimer:=TTimer.Create(nil);
+  FTimer.Interval:=500;
+  FTimer.OnTimer:=@TimerTick;
+  FTimer.Enabled:=true;
+end;
+
+destructor TWindowTitleUpdater.Destroy;
+begin
+  FTimer.Free;
+  inherited Destroy;
 end;
 
 procedure HandleParameters;
@@ -315,8 +356,10 @@ var
   path: string;
   noautorun: boolean;
   startupWindowTitle: string;
+  windowTitleUpdater: TWindowTitleUpdater;
 
 begin
+  InitializeWindowTitleRandomState;
   startupWindowTitle:=GenerateRandomWindowTitle;
   Application.Title:=startupWindowTitle;
  //'Cheat Engine 7.3';
@@ -445,7 +488,11 @@ begin
 
   OutputDebugString('Starting CE');
 
-
-  Application.Run;
+  windowTitleUpdater:=TWindowTitleUpdater.Create;
+  try
+    Application.Run;
+  finally
+    windowTitleUpdater.Free;
+  end;
 end.
 
