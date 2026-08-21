@@ -936,16 +936,23 @@ end;
 procedure TGDBServerDebuggerInterface.readBytesFast(address: ptruint; data: pointer; size: integer; out actualread: integer);
 var
   wasstopped: boolean;
-  d: pointer;
+  d: pointer=nil;
 begin
   ObtainLock;
   try
     breakIfNeeded;
 
     sendPacket('x'+inttohex(address,1)+','+inttohex(size,1));
-    actualread:=size;
-    receiveBinaryPacket(d,actualread);
-    copymemory(data,d,actualread);
+    actualread:=0;
+    try
+      if receiveBinaryPacket(d,actualread) then
+        copymemory(data,d,actualread)
+      else
+        actualread:=0;
+    finally
+      if d<>nil then
+        freememandnil(d);
+    end;
 
     continueAfterManualStop;
   finally
