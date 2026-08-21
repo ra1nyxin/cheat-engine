@@ -1780,6 +1780,7 @@ var address: ptruint;
 
   bp: PBreakpoint;
   i: integer;
+  bpPageStart, bpPageStop: ptruint;
 begin
   TDebuggerthread(debuggerthread).execlocation:=15;
   //check if the address that triggered it is in one of the active exception breakpoints and if so make the protection what it should be
@@ -1842,8 +1843,14 @@ begin
       if (bp.breakpointMethod=bpmException) then  //don't check for active, as some breakpoint events might be stacked
       begin
         //check if the address is in this breakpoint range
-        if inrangex(address, GetPageBase(bp.address), GetPageBase(bp.address+bp.size)+$fff) or
-           inrangex(address+$1000, GetPageBase(bp.address), GetPageBase(bp.address+bp.size)+$fff)
+        bpPageStart:=GetPageBase(bp.address);
+        if bp.size>0 then
+          bpPageStop:=GetPageBase(bp.address+bp.size-1)+$fff
+        else
+          bpPageStop:=bpPageStart+$fff;
+
+        if inrangex(address, bpPageStart, bpPageStop) or
+           inrangex(address+$1000, bpPageStart, bpPageStop)
         then
         begin
           TdebuggerThread(debuggerthread).UnsetBreakpoint(bp);

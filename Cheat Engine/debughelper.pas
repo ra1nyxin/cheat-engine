@@ -719,21 +719,22 @@ var
   bp: PBreakpoint;
   a: ptruint;
 
-  pbase: ptruint;
-  totalsize: integer;
+  pbase, pstop: ptruint;
 
-  pbase2: ptruint;
-  totalsize2: integer;
+  pbase2, pstop2: ptruint;
   mbi: TMEMORYBASICINFORMATION;
   i: integer;
 begin
   pbase:=GetPageBase(base);
-  totalsize:=(GetPageBase(base+size)-pbase)+$fff;
+  if size>0 then
+    pstop:=GetPageBase(base+size-1)+$fff
+  else
+    pstop:=pbase+$fff;
 
   //first get the current protection. If a breakpoint is set, it's access rights are less than what is required
   a:=pbase;
   result:=[];
-  while (a<pbase+totalsize) and (VirtualQueryEx(processhandle, pointer(a), mbi, sizeof(mbi))=sizeof(mbi)) do
+  while (a<=pstop) and (VirtualQueryEx(processhandle, pointer(a), mbi, sizeof(mbi))=sizeof(mbi)) do
   begin
     result:=result+AllocationProtectToAccessRights(mbi.Protect);
     inc(a, mbi.RegionSize);
@@ -749,9 +750,11 @@ begin
       begin
         //check if this address falls into this breakpoint range
         pbase2:=getPageBase(bp^.address);
-        totalsize2:=(GetPageBase(bp^.address+size)-pbase)+$fff;
-        if InRangeX(pbase, pbase2, pbase2+totalsize2) or
-           InRangeX(pbase+totalsize2, pbase2, pbase2+totalsize2) then //it's overlapping
+        if bp^.size>0 then
+          pstop2:=GetPageBase(bp^.address+bp^.size-1)+$fff
+        else
+          pstop2:=pbase2+$fff;
+        if (pbase<=pstop2) and (pbase2<=pstop) then
           result:=result+bp^.originalaccessrights;
       end;
 
@@ -765,14 +768,15 @@ function TDebuggerThread.AdjustAccessRightsWithActiveBreakpoints(ar: TAccessRigh
 var
   i: integer;
   bp:PBreakpoint;
-  pbase: ptruint;
-  totalsize: integer;
+  pbase, pstop: ptruint;
 
-  pbase2: ptruint;
-  totalsize2: integer;
+  pbase2, pstop2: ptruint;
 begin
   pbase:=GetPageBase(base);
-  totalsize:=(GetPageBase(base+size)-pbase)+$fff;
+  if size>0 then
+    pstop:=GetPageBase(base+size-1)+$fff
+  else
+    pstop:=pbase+$fff;
   result:=ar;
 
   debuggercs.enter;
@@ -784,9 +788,11 @@ begin
       begin
         //check if this address falls into this breakpoint range
         pbase2:=getPageBase(bp^.address);
-        totalsize2:=(GetPageBase(bp^.address+size)-pbase)+$fff;
-        if InRangeX(pbase, pbase2, pbase2+totalsize2) or
-           InRangeX(pbase+totalsize2, pbase2, pbase2+totalsize2) then //it's overlapping
+        if bp^.size>0 then
+          pstop2:=GetPageBase(bp^.address+bp^.size-1)+$fff
+        else
+          pstop2:=pbase2+$fff;
+        if (pbase<=pstop2) and (pbase2<=pstop) then
         begin
           case bp^.breakpointtrigger of
             bptExecute: result:=result-[arExecute];
