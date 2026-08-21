@@ -2,6 +2,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <limits.h>
+#include <stddef.h>
 #include <pthread.h>
 #include <sys/select.h>
 #include <sys/socket.h>
@@ -486,22 +487,60 @@ case CMD_SETTHREADCONTEXT:
 #pragma pack()
 
       uint32_t result;
+      int validcontextsize;
 
       PCONTEXT c;
 
       debug_log("CMD_SETTHREADCONTEXT:\n");
 
-      recvall(currentsocket, &stc, sizeof(stc), MSG_WAITALL);
+      if (recvall(currentsocket, &stc, sizeof(stc), MSG_WAITALL)!=sizeof(stc))
+        break;
+
       debug_log("hProcess=%d tid=%d structsize=%d\n", stc.hProcess, stc.tid, stc.structsize);
 
-      c=(PCONTEXT)malloc(stc.structsize);
-      recvall(currentsocket, c, stc.structsize, MSG_WAITALL);
+      validcontextsize=(stc.structsize==sizeof(CONTEXT));
+#ifdef __aarch64__
+      validcontextsize=validcontextsize ||
+        (stc.structsize==offsetof(CONTEXT, fp32)+sizeof(CONTEXT_FP32));
+#endif
+
+      if (!validcontextsize)
+      {
+        debug_log("Invalid context size %d\n", stc.structsize);
+        close(currentsocket);
+        return 0;
+      }
+
+      c=(PCONTEXT)calloc(1, sizeof(CONTEXT));
+      if (c==NULL)
+      {
+        close(currentsocket);
+        return 0;
+      }
+
+      if (recvall(currentsocket, c, stc.structsize, MSG_WAITALL)!=stc.structsize)
+      {
+        free(c);
+        close(currentsocket);
+        return 0;
+      }
 
       debug_log("received a context with data: structsize=%d type=%d\n", c->structsize, c->type);
 
-      debug_log("Going to call SetThreadContext(%d, %d, %p)\n", stc.hProcess, stc.tid, c);
-
-      result=SetThreadContext(stc.hProcess, stc.tid, c);
+      if ((c->structsize==stc.structsize) && (c->type<=3)
+#ifdef __aarch64__
+          && ((stc.structsize==sizeof(CONTEXT)) || (c->type==2))
+#endif
+         )
+      {
+        debug_log("Going to call SetThreadContext(%d, %d, %p)\n", stc.hProcess, stc.tid, c);
+        result=SetThreadContext(stc.hProcess, stc.tid, c);
+      }
+      else
+      {
+        debug_log("Invalid context header: structsize=%d type=%d\n", c->structsize, c->type);
+        result=0;
+      }
       free(c);
 
       debug_log("result=%d\n", result);
