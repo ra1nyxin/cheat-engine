@@ -77,6 +77,7 @@ type
 
     temporaryDisabledExceptionBreakpoints: Tlist;
     breakAddress: ptruint;
+    lastSetContextSucceeded: boolean;
 
 
     currentBP: PBreakpoint;
@@ -126,6 +127,7 @@ type
     procedure AddDebugEventString;
 
     function changedcontext: boolean; //for network handlers only. returns true if the context was changed from last getContext
+    procedure RestoreTemporaryExceptionBreakpoints;
 
   public
     isHandled: boolean; //set to true if this thread is the current debug target
@@ -495,6 +497,7 @@ procedure TDebugThreadHandler.setContext(fields: TContextFields=cfAll);
 var
   i: integer;
 begin
+  lastSetContextSucceeded:=false;
   if (handle<>0) and (not ishandled) and (not fissuspended) then
   begin
     exit;
@@ -506,31 +509,30 @@ begin
     if (handle<>0) or ((currentdebuggerinterface.controlsTheThreadList=false) and ishandled) then
     begin
       debuggercs.enter;
-      if processhandler.is64Bit then
-      begin
-        {$ifdef darwin}
-        PARM64CONTEXT(context)^.ContextFlags:=0;
-
-        if fields in [cfAll, cfDebug] then
-          PARM64CONTEXT(context)^.ContextFlags:=PARM64CONTEXT(context)^.ContextFlags or 1;
-        {$endif}
-
-
-        if not DebuggerInterfaceAPIWrapper.SetThreadContextArm64(self.handle, PARM64CONTEXT(context)^, isHandled) then
+      try
+        if processhandler.is64Bit then
         begin
-          outputdebugstring('setthreadcontextarm64 failed');
-        end;
+          {$ifdef darwin}
+          PARM64CONTEXT(context)^.ContextFlags:=0;
 
-      end
-      else
-      begin
-        if not DebuggerInterfaceAPIWrapper.SetThreadContextArm(self.handle, PARMCONTEXT(context)^, isHandled) then
+          if fields in [cfAll, cfDebug] then
+            PARM64CONTEXT(context)^.ContextFlags:=PARM64CONTEXT(context)^.ContextFlags or 1;
+          {$endif}
+
+          lastSetContextSucceeded:=DebuggerInterfaceAPIWrapper.SetThreadContextArm64(self.handle, PARM64CONTEXT(context)^, isHandled);
+          if not lastSetContextSucceeded then
+            outputdebugstring('setthreadcontextarm64 failed');
+        end
+        else
         begin
-
-          outputdebugstring('setthreadcontextarm failed');
+          lastSetContextSucceeded:=DebuggerInterfaceAPIWrapper.SetThreadContextArm(self.handle, PARMCONTEXT(context)^, isHandled);
+          if not lastSetContextSucceeded then
+            outputdebugstring('setthreadcontextarm failed');
         end;
+      finally
+        debuggercs.leave;
       end;
-      debuggercs.leave;
+
     end;
   end
   else
@@ -565,10 +567,11 @@ begin
         //context.dr7:=context.dr7 or $300;
 
         if CurrentDebuggerInterface is TGDBServerDebuggerInterface then
-          TGDBServerDebuggerInterface(CurrentDebuggerInterface).SetThreadContext(self.handle, pointer(context),ishandled)
+          lastSetContextSucceeded:=TGDBServerDebuggerInterface(CurrentDebuggerInterface).SetThreadContext(self.handle, pointer(context),ishandled)
         else
         begin
-          if not DebuggerInterfaceAPIWrapper.setthreadcontext(self.handle, PCONTEXT(context)^, isHandled) then
+          lastSetContextSucceeded:=DebuggerInterfaceAPIWrapper.setthreadcontext(self.handle, PCONTEXT(context)^, isHandled);
+          if not lastSetContextSucceeded then
           begin
             i := getlasterror;
             outputdebugstring(PChar('setthreadcontext error:' + IntToStr(getlasterror)));
@@ -1783,6 +1786,7 @@ var address: ptruint;
   bp: PBreakpoint;
   i: integer;
   bpPageStart, bpPageStop: ptruint;
+  processSuspended, currentThreadResumed, setupComplete: boolean;
 begin
   TDebuggerthread(debuggerthread).execlocation:=15;
   //check if the address that triggered it is in one of the active exception breakpoints and if so make the protection what it should be
@@ -1821,20 +1825,8 @@ begin
       Messagebox(0,rsDebugHandleAccessViolationDebugEventNow,rsSpecialCase,0);
       {$endif}
       try
-        for i:=0 to temporaryDisabledExceptionBreakpoints.Count-1 do
-        begin
-          bp:=PBreakpoint(temporaryDisabledExceptionBreakpoints[i]);
-          if not bp^.markedfordeletion then
-            TdebuggerThread(debuggerthread).setBreakpoint(bp);
-        end;
+        RestoreTemporaryExceptionBreakpoints;
       finally
-        for i:=0 to temporaryDisabledExceptionBreakpoints.Count-1 do
-        begin
-          bp:=PBreakpoint(temporaryDisabledExceptionBreakpoints[i]);
-          dec(bp^.referencecount); //decrease referencecount so they can be deleted
-        end;
-
-        freeandnil(temporaryDisabledExceptionBreakpoints);
         SuspendThread(handle);
 
         {$ifdef darwin}
@@ -1849,65 +1841,93 @@ begin
     else
       temporaryDisabledExceptionBreakpoints:=Tlist.create;
 
-    //now remove the protections
-
-    debuggercs.enter;
-    for i:=0 to breakpointlist.count-1 do
-    begin
-      bp:=breakpointList[i];
-      if (bp.breakpointMethod=bpmException) then  //don't check for active, as some breakpoint events might be stacked
-      begin
-        //check if the address is in this breakpoint range
-        bpPageStart:=GetPageBase(bp.address);
-        if bp.size>0 then
-          bpPageStop:=GetPageBase(bp.address+bp.size-1)+$fff
-        else
-          bpPageStop:=bpPageStart+$fff;
-
-        if inrangex(address, bpPageStart, bpPageStop) or
-           inrangex(address+$1000, bpPageStart, bpPageStop)
-        then
+    processSuspended:=false;
+    currentThreadResumed:=false;
+    setupComplete:=false;
+    try
+      //now remove the protections
+      debuggercs.enter;
+      try
+        for i:=0 to breakpointlist.count-1 do
         begin
-          TdebuggerThread(debuggerthread).UnsetBreakpoint(bp);
-          inc(bp.referencecount);
-          temporaryDisabledExceptionBreakpoints.Add(bp);
+          bp:=breakpointList[i];
+          if (bp.breakpointMethod=bpmException) then  //don't check for active, as some breakpoint events might be stacked
+          begin
+            //check if the address is in this breakpoint range
+            bpPageStart:=GetPageBase(bp.address);
+            if bp.size>0 then
+              bpPageStop:=GetPageBase(bp.address+bp.size-1)+$fff
+            else
+              bpPageStop:=bpPageStart+$fff;
+
+            if inrangex(address, bpPageStart, bpPageStop) or
+               inrangex(address+$1000, bpPageStart, bpPageStop)
+            then
+            begin
+              temporaryDisabledExceptionBreakpoints.Add(bp);
+              inc(bp.referencecount);
+              TdebuggerThread(debuggerthread).UnsetBreakpoint(bp);
+            end;
+          end;
+        end;
+      finally
+        debuggercs.leave;
+      end;
+
+      if temporaryDisabledExceptionBreakpoints.count=0 then
+      begin
+        //not caused by my pagechanges
+        freeandnil(temporaryDisabledExceptionBreakpoints);
+        exit; //continue unhandled
+      end;
+
+      breakAddress:=address;
+
+      //freeze all threads except this one and do a single step
+      context^.EFlags:=eflags_setTF(context^.EFlags,1);
+      setContext;
+      if not lastSetContextSucceeded then
+        raise Exception.Create('Failed to set context for exception breakpoint single-step');
+
+      {$ifdef darwin}
+      if task_suspend(processhandle)<>0 then
+        raise Exception.Create('Failed to suspend process for exception breakpoint single-step');
+      processSuspended:=true;
+      {$endif}
+      {$ifdef windows}
+      if NtSuspendProcess(processhandle)<>0 then
+        raise Exception.Create('Failed to suspend process for exception breakpoint single-step');
+      processSuspended:=true;
+      {$endif}
+
+      if ResumeThread(self.Handle)=dword(-1) then
+        raise Exception.Create('Failed to resume exception breakpoint thread');
+      currentThreadResumed:=true;
+
+      //handled, continue till the next int1
+      dwContinueStatus:=DBG_CONTINUE;
+      setupComplete:=true;
+    finally
+      if not setupComplete and (temporaryDisabledExceptionBreakpoints<>nil) then
+      begin
+        try
+          RestoreTemporaryExceptionBreakpoints;
+        finally
+          if processSuspended then
+          begin
+            if currentThreadResumed then
+              SuspendThread(handle);
+
+            {$ifdef darwin}
+            task_resume(processhandle);
+            {$endif}
+            {$ifdef windows}
+            NtResumeProcess(processhandle);
+            {$endif}
+          end;
         end;
       end;
     end;
-
-    debuggercs.leave;
-
-
-    if temporaryDisabledExceptionBreakpoints.count=0 then
-    begin
-      //not caused by my pagechanges
-      freeandnil(temporaryDisabledExceptionBreakpoints);
-      exit; //continue unhandled
-    end;
-
-
-
-    breakAddress:=address;
-
-    //freeze all threads except this one and do a single step
-    context^.EFlags:=eflags_setTF(context^.EFlags,1);
-    setContext;
-
-
-    {$ifdef darwin}
-    task_suspend(processhandle);
-    {$endif}
-    {$ifdef windows}
-    NtSuspendProcess(processhandle);
-    {$endif}
-
-    ResumeThread(self.Handle);
-
-
-   // suspendthread(self.Handle);
-
-    //handled, continue till the next int1
-    dwContinueStatus:=DBG_CONTINUE;
 
   end
   else
@@ -2114,25 +2134,10 @@ begin
             result:=DispatchBreakpoint(breakAddress, -1, dwContinueStatus);
         finally
           try
-            //reprotect the memory
-            for i:=0 to temporaryDisabledExceptionBreakpoints.Count-1 do
-            begin
-              bp:=PBreakpoint(temporaryDisabledExceptionBreakpoints[i]);
-              if not bp^.markedfordeletion then
-                TdebuggerThread(debuggerthread).setBreakpoint(bp);
-            end;
-          finally
-            try
-              for i:=0 to temporaryDisabledExceptionBreakpoints.Count-1 do
-              begin
-                bp:=PBreakpoint(temporaryDisabledExceptionBreakpoints[i]);
-                dec(bp^.referencecount); //decrease referencecount so they can be deleted
-              end;
-
-              freeandnil(temporaryDisabledExceptionBreakpoints);
-              context^.EFlags:=eflags_setRF(context^.EFlags,0);
-              setContext;
-              dwContinueStatus:=DBG_CONTINUE;
+            RestoreTemporaryExceptionBreakpoints;
+            context^.EFlags:=eflags_setRF(context^.EFlags,0);
+            setContext;
+            dwContinueStatus:=DBG_CONTINUE;
             finally
               SuspendThread(handle);
 
@@ -2142,7 +2147,6 @@ begin
               {$ifdef windows}
               NtResumeProcess(processhandle);
               {$endif}
-            end;
           end;
         end;
         exit;
@@ -2468,8 +2472,59 @@ begin
   dwContinueStatus:=DBG_CONTINUE;
 end;
 
+procedure TDebugThreadHandler.RestoreTemporaryExceptionBreakpoints;
+var
+  bp: PBreakpoint;
+  i: integer;
+  pending: TList;
+begin
+  pending:=temporaryDisabledExceptionBreakpoints;
+  temporaryDisabledExceptionBreakpoints:=nil;
+  if pending=nil then exit;
+
+  try
+    for i:=0 to pending.Count-1 do
+    begin
+      bp:=PBreakpoint(pending[i]);
+      if not bp^.markedfordeletion then
+      begin
+        try
+          TdebuggerThread(debuggerthread).setBreakpoint(bp);
+        except
+          on e: Exception do
+            OutputDebugString(PChar('Failed to restore exception breakpoint: '+e.Message));
+        end;
+      end;
+    end;
+  finally
+    for i:=0 to pending.Count-1 do
+    begin
+      bp:=PBreakpoint(pending[i]);
+      dec(bp^.referencecount);
+    end;
+    pending.free;
+  end;
+end;
+
 destructor TDebugThreadHandler.destroy;
 begin
+  if temporaryDisabledExceptionBreakpoints<>nil then
+  begin
+    try
+      RestoreTemporaryExceptionBreakpoints;
+    finally
+      if handle<>0 then
+        SuspendThread(handle);
+
+      {$ifdef darwin}
+      task_resume(processhandle);
+      {$endif}
+      {$ifdef windows}
+      NtResumeProcess(processhandle);
+      {$endif}
+    end;
+  end;
+
   freememandnil(realcontextpointer);
 
   {if (handle<>0) and (getConnection=nil) then
