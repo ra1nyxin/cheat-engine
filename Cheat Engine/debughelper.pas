@@ -1654,6 +1654,28 @@ var
   x: PtrUInt;
   i: integer;
   count: integer;
+
+  procedure FreeUninstalledBreakpoint;
+  begin
+    if newbp=nil then exit;
+
+    if newbp^.conditonalbreakpoint.script<>nil then
+      StrDispose(newbp^.conditonalbreakpoint.script);
+
+    if newbp^.traceendcondition<>nil then
+      StrDispose(newbp^.traceendcondition);
+
+    if assigned(newbp^.OnBreakpoint) then
+      LuaCaller.CleanupLuaCall(TMethod(newbp^.OnBreakpoint));
+
+    if newbp^.changeregEx.context<>nil then
+      FreeMemAndNil(newbp^.changeregEx.context);
+
+    if newbp^.changeregEx.mask<>nil then
+      FreeMemAndNil(newbp^.changeregEx.mask);
+
+    FreeMemAndNil(newbp);
+  end;
 begin
   originalbyte:=0;
   if CurrentDebuggerInterface is TDBVMDebugInterface then
@@ -1729,11 +1751,22 @@ begin
 
   debuggercs.enter;
   try
-    //add to the bp list
-    BreakpointList.Add(newbp);
-    //apply this breakpoint
+    try
+      //add to the bp list
+      BreakpointList.Add(newbp);
+      //apply this breakpoint
 
-    SetBreakpoint(newbp);
+      if not SetBreakpoint(newbp) then
+      begin
+        BreakpointList.Remove(newbp);
+        FreeUninstalledBreakpoint;
+        exit(nil);
+      end;
+    except
+      BreakpointList.Remove(newbp);
+      FreeUninstalledBreakpoint;
+      raise;
+    end;
   finally
     debuggercs.leave;
   end;

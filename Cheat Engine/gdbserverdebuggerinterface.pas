@@ -819,14 +819,15 @@ begin
   obtainlock;
   try
     breakifneeded;
+    try
 
-    if data<>'' then
-      sendPacket(data);
+      if data<>'' then
+        sendPacket(data);
 
-    result:=receivePacket(timeout,true);
-
-
-    continueAfterManualStop;
+      result:=receivePacket(timeout,true);
+    finally
+      continueAfterManualStop;
+    end;
   finally
     ReleaseLock;
   end;
@@ -847,49 +848,49 @@ begin
   ObtainLock;
   try
     breakIfNeeded;
+    try
 
-    //e.g: M10002C7DD,6:909090909090
+      //e.g: M10002C7DD,6:909090909090
 
 
    // outputdebugstring(format('writeBytes(%x)',[address]));
 
-    bytesleft:=size;
-    result:=true;
-    while result and (bytesleft>0) do
-    begin
-      blocksize:=min(bytesleft, max(1, (maxpacketsize-32) div 2));
-      repeat
-        packetheader:='M'+inttohex(address,1)+','+inttohex(blocksize,1)+':';
-        if length(packetheader)+blocksize*2<=maxpacketsize then
-          break;
+      bytesleft:=size;
+      result:=true;
+      while result and (bytesleft>0) do
+      begin
+        blocksize:=min(bytesleft, max(1, (maxpacketsize-32) div 2));
+        repeat
+          packetheader:='M'+inttohex(address,1)+','+inttohex(blocksize,1)+':';
+          if length(packetheader)+blocksize*2<=maxpacketsize then
+            break;
 
-        dec(blocksize);
-      until blocksize=0;
+          dec(blocksize);
+        until blocksize=0;
 
-      if blocksize=0 then
-        exit(false);
+        if blocksize=0 then
+          exit(false);
 
-      getmem(hexstr,blocksize*2+1);
-      try
-        BinToHex(data, hexstr,blocksize);
-        hexstr[blocksize*2]:=#0;
-        s:=packetheader+hexstr;
-      finally
-        freememandnil(hexstr);
+        getmem(hexstr,blocksize*2+1);
+        try
+          BinToHex(data, hexstr,blocksize);
+          hexstr[blocksize*2]:=#0;
+          s:=packetheader+hexstr;
+        finally
+          freememandnil(hexstr);
+        end;
+
+        sendPacket(s);
+        r:=receivePacket(1000);
+        result:=r='OK';
+
+        inc(address, blocksize);
+        inc(data, blocksize);
+        dec(bytesleft, blocksize);
       end;
-
-      sendPacket(s);
-      r:=receivePacket(1000);
-      result:=r='OK';
-
-      inc(address, blocksize);
-      inc(data, blocksize);
-      dec(bytesleft, blocksize);
+    finally
+      continueAfterManualStop;
     end;
-
-
-
-    continueAfterManualStop;
 
   finally
     ReleaseLock;
@@ -907,26 +908,28 @@ begin
   ObtainLock;
   try
     breakIfNeeded;
+    try
 
-    actualread:=0;
+      actualread:=0;
 
-    bytesleft:=size;
-    while bytesleft>0 do
-    begin
-      blocksize:=min(maxpacketsize, bytesleft);
-      sendPacket('m'+inttohex(address,1)+','+inttohex(blocksize,1));
-      s:=receivePacket(1000);
-      size:=length(s) div 2;
-      if size<>blocksize then break;
+      bytesleft:=size;
+      while bytesleft>0 do
+      begin
+        blocksize:=min(maxpacketsize, bytesleft);
+        sendPacket('m'+inttohex(address,1)+','+inttohex(blocksize,1));
+        s:=receivePacket(1000);
+        size:=length(s) div 2;
+        if size<>blocksize then break;
 
-      HexToBin(pchar(s),data, size);
+        HexToBin(pchar(s),data, size);
 
-      inc(actualread, size);
-      inc(data,size);
-      dec(bytesleft, size);
+        inc(actualread, size);
+        inc(data,size);
+        dec(bytesleft, size);
+      end;
+    finally
+      continueAfterManualStop;
     end;
-
-    continueAfterManualStop;
 
   finally
     ReleaseLock;
@@ -942,23 +945,25 @@ begin
   ObtainLock;
   try
     breakIfNeeded;
-
-    sendPacket('x'+inttohex(address,1)+','+inttohex(size,1));
-    actualread:=0;
-    receivedsize:=0;
     try
-      if receiveBinaryPacket(d,receivedsize) and
-         (receivedsize>=0) and (receivedsize<=size) then
-      begin
-        copymemory(data,d,receivedsize);
-        actualread:=receivedsize;
+
+      sendPacket('x'+inttohex(address,1)+','+inttohex(size,1));
+      actualread:=0;
+      receivedsize:=0;
+      try
+        if receiveBinaryPacket(d,receivedsize) and
+           (receivedsize>=0) and (receivedsize<=size) then
+        begin
+          copymemory(data,d,receivedsize);
+          actualread:=receivedsize;
+        end;
+      finally
+        if d<>nil then
+          freememandnil(d);
       end;
     finally
-      if d<>nil then
-        freememandnil(d);
+      continueAfterManualStop;
     end;
-
-    continueAfterManualStop;
   finally
     ReleaseLock;
   end;
@@ -1023,16 +1028,18 @@ procedure TGDBServerDebuggerInterface.continueAfterManualStop;
 begin
   //outputdebugstring('continueAfterManualStop: breakIfNeededCount='+breakIfNeededCount.ToString);
   ObtainLock;
-  if breakIfNeededCount>0 then
-    dec(breakIfNeededCount);
+  try
+    if breakIfNeededCount>0 then
+      dec(breakIfNeededCount);
 
-  if stoppedDueToManualBreak and (breakIfNeededCount=0) then
-  begin
-    //outputdebugstring('continueAfterManualStop: Continueing');
-    sendPacket('c');
+    if stoppedDueToManualBreak and (breakIfNeededCount=0) then
+    begin
+      //outputdebugstring('continueAfterManualStop: Continueing');
+      sendPacket('c');
+    end;
+  finally
+    ReleaseLock;
   end;
-
-  ReleaseLock;
 end;
 
 function TGDBServerDebuggerInterface.setWriteBP(address: ptruint; size: integer=1):integer;
@@ -1045,29 +1052,31 @@ begin
   obtainlock;
   try
     breakIfNeeded;
+    try
 
-    sendPacket('Z2,'+inttohex(address)+','+inttostr(size));
-    s:=receivePacket(1000);
-    if s<>'OK' then
-      raise exception.create('Failure setting write watch');
+      sendPacket('Z2,'+inttohex(address)+','+inttostr(size));
+      s:=receivePacket(1000);
+      if s<>'OK' then
+        raise exception.create('Failure setting write watch');
 
-    getmem(bp, sizeof(TGDBBreakpoint));
-    bp^.address:=address;
-    bp^.bptype:=2;
-    bp^.bpkind:=size;
+      getmem(bp, sizeof(TGDBBreakpoint));
+      bp^.address:=address;
+      bp^.bptype:=2;
+      bp^.bpkind:=size;
 
-    for i:=0 to breakpoints.count-1 do
-      if breakpoints[i]=nil then
-      begin
-        breakpoints[i]:=bp;
-        result:=i;
-        break;
-      end;
+      for i:=0 to breakpoints.count-1 do
+        if breakpoints[i]=nil then
+        begin
+          breakpoints[i]:=bp;
+          result:=i;
+          break;
+        end;
 
-    if result=-1 then
-      result:=breakpoints.add(bp);
-
-    continueAfterManualStop;
+      if result=-1 then
+        result:=breakpoints.add(bp);
+    finally
+      continueAfterManualStop;
+    end;
   finally
     ReleaseLock;
   end;
@@ -1084,30 +1093,31 @@ begin
   obtainlock;
   try
     breakIfNeeded;
+    try
 
-    sendPacket('Z4,'+inttohex(address)+','+inttostr(size));
-    s:=receivePacket(1000);
-    if s<>'OK' then
-      raise exception.create('Failure setting writye watch');
+      sendPacket('Z4,'+inttohex(address)+','+inttostr(size));
+      s:=receivePacket(1000);
+      if s<>'OK' then
+        raise exception.create('Failure setting writye watch');
 
-    getmem(bp, sizeof(TGDBBreakpoint));
-    bp^.address:=address;
-    bp^.bptype:=4;
-    bp^.bpkind:=size;
+      getmem(bp, sizeof(TGDBBreakpoint));
+      bp^.address:=address;
+      bp^.bptype:=4;
+      bp^.bpkind:=size;
 
-    for i:=0 to breakpoints.count-1 do
-      if breakpoints[i]=nil then
-      begin
-        breakpoints[i]:=bp;
-        result:=i;
-        break;
-      end;
+      for i:=0 to breakpoints.count-1 do
+        if breakpoints[i]=nil then
+        begin
+          breakpoints[i]:=bp;
+          result:=i;
+          break;
+        end;
 
-    if result=-1 then
-      result:=breakpoints.add(bp);
-
-    continueAfterManualStop;
-
+      if result=-1 then
+        result:=breakpoints.add(bp);
+    finally
+      continueAfterManualStop;
+    end;
   finally
     ReleaseLock;
   end;
@@ -1127,36 +1137,37 @@ begin
   obtainlock;
   try
     breakIfNeeded;
+    try
 
-    sendPacket('Z'+preferedbptype.ToString+','+inttohex(address)+',1');
-    s:=receivePacket(1000);
-    if (s<>'OK') then
-    begin
-      preferedbptype:=(preferedbptype+1) mod 2;
       sendPacket('Z'+preferedbptype.ToString+','+inttohex(address)+',1');
       s:=receivePacket(1000);
-      if s<>'OK' then
-        raise exception.create('Failure setting breakpoint');
-    end;
-
-    getmem(bp, sizeof(TGDBBreakpoint));
-    bp^.address:=address;
-    bp^.bptype:=preferedbptype;
-    bp^.bpkind:=1;
-
-    for i:=0 to breakpoints.count-1 do
-      if breakpoints[i]=nil then
+      if (s<>'OK') then
       begin
-        breakpoints[i]:=bp;
-        result:=i;
-        break;
+        preferedbptype:=(preferedbptype+1) mod 2;
+        sendPacket('Z'+preferedbptype.ToString+','+inttohex(address)+',1');
+        s:=receivePacket(1000);
+        if s<>'OK' then
+          raise exception.create('Failure setting breakpoint');
       end;
 
-    if result=-1 then
-      result:=breakpoints.add(bp);
+      getmem(bp, sizeof(TGDBBreakpoint));
+      bp^.address:=address;
+      bp^.bptype:=preferedbptype;
+      bp^.bpkind:=1;
 
+      for i:=0 to breakpoints.count-1 do
+        if breakpoints[i]=nil then
+        begin
+          breakpoints[i]:=bp;
+          result:=i;
+          break;
+        end;
 
-    continueAfterManualStop;
+      if result=-1 then
+        result:=breakpoints.add(bp);
+    finally
+      continueAfterManualStop;
+    end;
   finally
     ReleaseLock;
   end;
@@ -1186,7 +1197,9 @@ procedure TGDBServerDebuggerInterface.deleteBreakpoint(index: integer);
 var bp: PGDBBreakpoint;
   i: integer;
 begin
-  disableBreakpoint(index);
+  if not disableBreakpoint(index) then
+    raise exception.create('Failure removing breakpoint');
+
   bp:=PGDBBreakpoint(breakpoints[index]);
   freemem(bp);
   breakpoints[index]:=nil;
@@ -1206,14 +1219,13 @@ var
   s: string;
   bp: PGDBBreakpoint;
 begin
+  result:=false;
   if (index<0) or (index>=breakpoints.Count) then raise exception.create('disableBreakpoint: invalid index');
 
   bp:=PGDBBreakpoint(breakpoints[index]);
 
   if bp=nil then
-  begin
     exit;
-  end;
 
   ObtainLock;
   try
@@ -1273,39 +1285,40 @@ begin
   obtainlock;
   try
     breakIfNeeded;
+    try
 
-    sendPacket('qfProcessInfoInfo');
-    r:=receivePacket;
-
-    if (r='') or (r[1]='E') then exit;
-
-    repeat
-      sa:=r.split([';']);
-      pidstring:='';
-      pname:='';
-      for i:=0 to length(sa)-1 do
-      begin
-        if sa[i].StartsWith('pid:') then
-          pidstring:=copy(sa[i], 5);
-
-        if sa[i].StartsWith('name:') then
-          name:=copy(sa[i],6);
-      end;
-
-      if (pidstring<>'') and (name<>'') and (pidstring<>'0') then
-      begin
-        setlength(s,length(name) div 2);
-        HexToBin(pchar(name), pchar(@s[1]), length(s));
-        list.add(inttohex(strtoint(pidstring),8)+'-'+s);
-      end;
-
-
-
-      sendPacket('qsProcessInfo');
+      sendPacket('qfProcessInfoInfo');
       r:=receivePacket;
-    until (r='') or (r[1]='E');
 
-    continueAfterManualStop;
+      if (r='') or (r[1]='E') then exit;
+
+      repeat
+        sa:=r.split([';']);
+        pidstring:='';
+        pname:='';
+        for i:=0 to length(sa)-1 do
+        begin
+          if sa[i].StartsWith('pid:') then
+            pidstring:=copy(sa[i], 5);
+
+          if sa[i].StartsWith('name:') then
+            name:=copy(sa[i],6);
+        end;
+
+        if (pidstring<>'') and (name<>'') and (pidstring<>'0') then
+        begin
+          setlength(s,length(name) div 2);
+          HexToBin(pchar(name), pchar(@s[1]), length(s));
+          list.add(inttohex(strtoint(pidstring),8)+'-'+s);
+        end;
+
+        sendPacket('qsProcessInfo');
+        r:=receivePacket;
+      until (r='') or (r[1]='E');
+    finally
+      continueAfterManualStop;
+    end;
+
   finally
     releaselock;
   end;
@@ -1328,27 +1341,30 @@ begin
     timeout:=0;
 
     breakIfNeeded;
+    try
 
-    sendPacket('qfThreadInfo');
-    s:=receivePacket(1000);
-    while (s<>'') and (s<>'l') do
-    begin
-      if s[1]='m' then
+      sendPacket('qfThreadInfo');
+      s:=receivePacket(1000);
+      while (s<>'') and (s<>'l') do
       begin
-        tls:=copy(s,2).Split([',']);
-        oldpos:=length(tl);
-        setlength(tl, length(tl)+length(tls));
-        for i:=0 to length(tls)-1 do
+        if s[1]='m' then
         begin
-          tl[oldpos+i]:=strtoint('$'+tls[i]);
-        end;
-        sendPacket('qsThreadInfo');
-        s:=receivePacket(1000);
-      end
-      else break;
-    end;
+          tls:=copy(s,2).Split([',']);
+          oldpos:=length(tl);
+          setlength(tl, length(tl)+length(tls));
+          for i:=0 to length(tls)-1 do
+          begin
+            tl[oldpos+i]:=strtoint('$'+tls[i]);
+          end;
+          sendPacket('qsThreadInfo');
+          s:=receivePacket(1000);
+        end
+        else break;
+      end;
 
-    continueAfterManualStop;
+    finally
+      continueAfterManualStop;
+    end;
   finally
     releaselock;
   end;
@@ -1996,31 +2012,31 @@ var
 begin
   result:=true;
   ObtainLock;
-  breakIfNeeded;
   try
-    d:=hThread;
-    if oldcontexts.GetData(d,oldc) then
-    begin
-      //figure out the differences and apply the changes reg by reg
-      if gdbcontextHandler.isDifferent(lpContext, oldc) then
+    breakIfNeeded;
+    try
+      d:=hThread;
+      if oldcontexts.GetData(d,oldc) then
       begin
-        //sendPacket('Gxxxxxx;thread:'+hThread.ToHexString); doesn't seem to work
+        //figure out the differences and apply the changes reg by reg
+        if gdbcontextHandler.isDifferent(lpContext, oldc) then
+        begin
+          //sendPacket('Gxxxxxx;thread:'+hThread.ToHexString); doesn't seem to work
 
 
-        //apply the differences
-        r1:=ApplyRegisterChanges(hThread, gdbcontextHandler.getGeneralPurposeRegisters, oldc, lpContext);
-        r2:=ApplyRegisterChanges(hThread, gdbcontextHandler.getFloatingPointRegisters,  oldc, lpContext);
-        result:=r1 and r2;
+          //apply the differences
+          r1:=ApplyRegisterChanges(hThread, gdbcontextHandler.getGeneralPurposeRegisters, oldc, lpContext);
+          r2:=ApplyRegisterChanges(hThread, gdbcontextHandler.getFloatingPointRegisters,  oldc, lpContext);
+          result:=r1 and r2;
 
-        if result then
-          copymemory(oldc, lpContext, gdbcontextHandler.ContextSize); //apply the changes to the local copy so they don't get written again
+          if result then
+            copymemory(oldc, lpContext, gdbcontextHandler.ContextSize); //apply the changes to the local copy so they don't get written again
+        end;
       end;
+    finally
+      continueAfterManualStop;
     end;
-
-
-
   finally
-    continueAfterManualStop;
     ReleaseLock;
   end;
 end;
@@ -2038,56 +2054,58 @@ begin
   result:=false;
   contextread:=false;
   ObtainLock;
-  breakIfNeeded;
   try
-    if canUseContextCommands then
-    begin
-      sendPacket('g;thread:'+hThread.ToHexString);
-      r:=receivePacket;
-      r:=StringReplace(r,'x','0',[rfReplaceAll]);
-      contextread:=HexToBin(pchar(r),pchar(lpcontext),gdbcontextHandler.ContextSize)=gdbcontextHandler.ContextSize;
-    end
-    else
-    begin
-      //get each register seperately
-      sendPacket('Hg'+hThread.ToHexString);
-      r:=receivePacket;
-
-      if r<>'OK' then
-        OutputDebugString(pchar('GetThreadContext: Setting thread to '+hThread.ToHexString+' failed'))
+    breakIfNeeded;
+    try
+      if canUseContextCommands then
+      begin
+        sendPacket('g;thread:'+hThread.ToHexString);
+        r:=receivePacket;
+        r:=StringReplace(r,'x','0',[rfReplaceAll]);
+        contextread:=HexToBin(pchar(r),pchar(lpcontext),gdbcontextHandler.ContextSize)=gdbcontextHandler.ContextSize;
+      end
       else
-        contextread:=true;
-
-      ZeroMemory(lpContext, gdbcontextHandler.ContextSize);
-      rl:=gdbcontextHandler.getGeneralPurposeRegisters;
-      for i:=0 to length(rl^)-1 do
       begin
-        if not contextread then
-          break;
-
-        sendPacket('p'+inttohex(rl^[i].internalidentifier,2));
+        //get each register seperately
+        sendPacket('Hg'+hThread.ToHexString);
         r:=receivePacket;
-        r:=StringReplace(r,'x','0',[rfReplaceAll]);
-        contextread:=(r<>'') and
-                     (HexToBin(pchar(r), rl^[i].getPointer(lpContext), rl^[i].size)=rl^[i].size);
-      end;
 
-      rl:=gdbcontextHandler.getFloatingPointRegisters;
-      for i:=0 to length(rl^)-1 do
-      begin
-        if not contextread then
-          break;
+        if r<>'OK' then
+          OutputDebugString(pchar('GetThreadContext: Setting thread to '+hThread.ToHexString+' failed'))
+        else
+          contextread:=true;
 
-        sendPacket('p'+inttohex(rl^[i].internalidentifier,2));
-        r:=receivePacket;
-        r:=StringReplace(r,'x','0',[rfReplaceAll]);
-        contextread:=(r<>'') and
-                     (HexToBin(pchar(r), rl^[i].getPointer(lpContext), rl^[i].size)=rl^[i].size);
+        ZeroMemory(lpContext, gdbcontextHandler.ContextSize);
+        rl:=gdbcontextHandler.getGeneralPurposeRegisters;
+        for i:=0 to length(rl^)-1 do
+        begin
+          if not contextread then
+            break;
+
+          sendPacket('p'+inttohex(rl^[i].internalidentifier,2));
+          r:=receivePacket;
+          r:=StringReplace(r,'x','0',[rfReplaceAll]);
+          contextread:=(r<>'') and
+                       (HexToBin(pchar(r), rl^[i].getPointer(lpContext), rl^[i].size)=rl^[i].size);
+        end;
+
+        rl:=gdbcontextHandler.getFloatingPointRegisters;
+        for i:=0 to length(rl^)-1 do
+        begin
+          if not contextread then
+            break;
+
+          sendPacket('p'+inttohex(rl^[i].internalidentifier,2));
+          r:=receivePacket;
+          r:=StringReplace(r,'x','0',[rfReplaceAll]);
+          contextread:=(r<>'') and
+                       (HexToBin(pchar(r), rl^[i].getPointer(lpContext), rl^[i].size)=rl^[i].size);
+        end;
       end;
+    finally
+      continueAfterManualStop;
     end;
-
   finally
-    continueAfterManualStop;
     ReleaseLock;
   end;
 
@@ -2108,19 +2126,22 @@ var
 begin
   result:=0;
   ObtainLock;
-  breakIfNeeded;
   try
-    sendPacket('_M'+size.ToHexString+','+protections);
-    r:=receivePacket;
-    if (r<>'') and (r[1]<>'E') then
-    begin
-      try
-        result:=StrToInt64('$'+r);
-      except
+    breakIfNeeded;
+    try
+      sendPacket('_M'+size.ToHexString+','+protections);
+      r:=receivePacket;
+      if (r<>'') and (r[1]<>'E') then
+      begin
+        try
+          result:=StrToInt64('$'+r);
+        except
+        end;
       end;
+    finally
+      continueAfterManualStop;
     end;
   finally
-    continueAfterManualStop;
     ReleaseLock;
   end;
 end;
@@ -2131,13 +2152,16 @@ var
 begin
   result:=false;
   ObtainLock;
-  breakIfNeeded;
   try
-    sendpacket('_m'+address.ToHexString);
-    r:=receivePacket;
-    result:=r='OK';
+    breakIfNeeded;
+    try
+      sendpacket('_m'+address.ToHexString);
+      r:=receivePacket;
+      result:=r='OK';
+    finally
+      continueAfterManualStop;
+    end;
   finally
-    continueAfterManualStop;
     ReleaseLock;
   end;
 
