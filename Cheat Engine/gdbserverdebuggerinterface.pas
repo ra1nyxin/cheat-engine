@@ -488,12 +488,24 @@ begin
       begin
         if not waitForData(0) then break;
         i:=fprecv(socket, buf,4095,0);
+        if i<=0 then
+        begin
+          if socket<>0 then
+          begin
+            {$ifdef windows}
+            closesocket(socket);
+            {$else}
+            fpclose(socket);
+            {$endif}
+            socket:=0;
+          end;
+          exit;
+        end;
+
         buf[i]:=#0;
 
         receiveBuffer:=receiveBuffer+buf;
-
-        if i>0 then
-          receivedData:=true;
+        receivedData:=true;
         //find a buffer inside the receiveBuffer and if found, return it as a result (and ack)
       end;
 
