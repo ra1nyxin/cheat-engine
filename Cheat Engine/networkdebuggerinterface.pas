@@ -173,6 +173,15 @@ type
   PNetworkContext=^TNetworkContext;
 
 
+function HasNetworkContextSize(context: PNetworkContext; contexttype: uint32;
+  payloadsize: sizeuint): boolean;
+begin
+  result:=(context<>nil) and
+          (context^.contexttype=contexttype) and
+          (context^.contextsize>=2*sizeof(uint32)+payloadsize);
+end;
+
+
 function SetThreadContext(hThread: THandle; const lpContext: TContext): bool;
 var
   context: TNetworkContext;
@@ -268,7 +277,8 @@ begin
         {$ifdef cpu64}
         if processhandler.is64Bit then
         begin
-          if context^.contexttype<>networkContextType_X86_64 then
+          if not HasNetworkContextSize(context, networkContextType_X86_64,
+            sizeof(TNetworkX86_64Context)) then
           begin
             OutputDebugString('Expected X86_64 context, received type '+context^.contexttype.ToString);
             exit(false);
@@ -306,7 +316,8 @@ begin
         else
         {$endif}
         begin
-          if context^.contexttype<>networkContextType_X86 then
+          if not HasNetworkContextSize(context, networkContextType_X86,
+            sizeof(TNetworkX86_32Context)) then
           begin
             OutputDebugString('Expected X86_32 context, received type '+context^.contexttype.ToString);
             exit(false);
@@ -401,7 +412,8 @@ begin
         end
         else
         begin
-          if carm^.contexttype<>networkContextType_Arm then
+          if not HasNetworkContextSize(carm, networkContextType_Arm,
+            sizeof(TNetworkARM_32Context)) then
           begin
             OutputDebugString('Expected ARM context, received type '+carm^.contexttype.ToString);
             exit(false);
@@ -462,7 +474,8 @@ begin
       begin
         if processhandler.is64Bit then
         begin
-          if carm64^.contexttype<>networkContextType_Arm64 then
+          if not HasNetworkContextSize(carm64, networkContextType_Arm64,
+            sizeof(TNetworkARM_64Context)) then
           begin
             OutputDebugString('Expected ARM64 context, received type '+carm64^.contexttype.ToString);
             exit(false);

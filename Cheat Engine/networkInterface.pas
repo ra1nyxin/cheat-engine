@@ -1905,6 +1905,9 @@ end;
 function TCEConnection.AllocateAndGetContext(hProcess: Thandle; threadid: integer): pointer;
 //get he context and save it in an allocated memory block of variable size. The caller is responsible for freeing this block
 
+const
+  MAX_NETWORK_CONTEXT_SIZE=1024*1024;
+
 var
   Input: packed record
     command: UINT8;
@@ -1928,11 +1931,26 @@ begin
     begin
       if (r<>0) and (receive(@contextsize, sizeof(contextsize))>0) then
       begin
+        if (contextsize<2*sizeof(uint32)) or (contextsize>MAX_NETWORK_CONTEXT_SIZE) then
+        begin
+          fConnected:=false;
+          if socket<>0 then
+            CloseSocket(socket);
+          socket:=0;
+          exit;
+        end;
+
         getmem(result,  contextsize);
-        if receive(result, contextsize)=0 then
+        if (receive(result, contextsize)<>contextsize) or
+           (PUINT32(result)^<>contextsize) then
         begin
           FreeMemAndNil(result);
           result:=nil;
+
+          fConnected:=false;
+          if socket<>0 then
+            CloseSocket(socket);
+          socket:=0;
         end;
       end;
     end;
