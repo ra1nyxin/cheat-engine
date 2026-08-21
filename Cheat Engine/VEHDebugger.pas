@@ -42,6 +42,7 @@ type
 
     threads: TMap;  //internal threadhandle map
 
+    function OpenTargetThread(threadid: dword): THandle;
     procedure SynchronizeNoBreakList;
     procedure DoThreadPoll;
   public
@@ -83,6 +84,8 @@ resourcestring
 
 
 type
+  TGetProcessIdOfThread=function(Thread: THandle): DWORD; stdcall;
+
   TInjectedEvent=class
   public
     eventtype: (etThreadCreate,etThreadDestroy); //0=create thread, 1=destroythread
@@ -102,6 +105,23 @@ type
 procedure THeartBeat.startVersionCheck;
 begin
   doVersionCheck:=true;
+end;
+
+function TVEHDebugInterface.OpenTargetThread(threadid: dword): THandle;
+var
+  getProcessIdOfThread: TGetProcessIdOfThread;
+begin
+  result:=OpenThread(THREAD_ALL_ACCESS, false, threadid);
+  if result=0 then
+    exit;
+
+  getProcessIdOfThread:=GetProcAddress(GetModuleHandle('kernel32.dll'), 'GetProcessIdOfThread');
+  if (not assigned(getProcessIdOfThread)) or
+     (getProcessIdOfThread(result)<>processhandler.processid) then
+  begin
+    CloseHandle(result);
+    result:=0;
+  end;
 end;
 
 procedure THeartBeat.invalidVersionMessage;
@@ -329,21 +349,25 @@ begin
       //create thread
 
       lpDebugEvent.dwDebugEventCode:=CREATE_THREAD_DEBUG_EVENT;
-      lpDebugEvent.CreateThread.hThread:=OpenThread(THREAD_ALL_ACCESS,false, inj.ThreadId);
-
       lpDebugEvent.CreateThread.lpStartAddress:=nil;
       lpDebugEvent.CreateThread.lpThreadLocalBase:=nil;
 
       if threads.GetData(lpDebugEvent.dwThreadId,currentthread)=false then
       begin
-        CurrentThread:=OpenThread(THREAD_ALL_ACCESS,false, lpDebugEvent.dwThreadId);
-        threads.Add(lpDebugEvent.dwThreadId, currentthread);
+        CurrentThread:=OpenTargetThread(lpDebugEvent.dwThreadId);
+        if CurrentThread<>0 then
+          threads.Add(lpDebugEvent.dwThreadId, currentthread);
       end;
 
-      if CurrentThread<>0 then
+      lpDebugEvent.CreateThread.hThread:=CurrentThread;
+      if CurrentThread=0 then
       begin
-        suspendThread(CurrentThread);
+        inj.free;
+        injectedEvents.Delete(0);
+        exit(false);
       end;
+
+      suspendThread(CurrentThread);
     end
     else
     begin
@@ -371,12 +395,32 @@ begin
   begin
     ZeroMemory(@lpDebugEvent, sizeof(TdebugEvent));
 
+    if VEHDebugView.ProcessID<>processhandler.processid then
+    begin
+      VEHDebugView^.ContinueMethod:=DBG_EXCEPTION_NOT_HANDLED;
+      SetEvent(HasHandledDebugEvent);
+      exit(false);
+    end;
 
-   // lpDebugEvent.dwDebugEventCode:=EXCEPTION_DEBUG_EVENT; //exception
-    lpDebugEvent.dwProcessId:=VEHDebugView.ProcessID;
+    // lpDebugEvent.dwDebugEventCode:=EXCEPTION_DEBUG_EVENT; //exception
+    lpDebugEvent.dwProcessId:=processhandler.processid;
     lpDebugEvent.dwThreadId:=VEHDebugView.ThreadID;
     lpDebugEvent.Exception.dwFirstChance:=1;
 
+    h:=0;
+    if (VEHDebugView.Exception64.ExceptionCode<>$ce000002) and
+       ((not threads.GetData(lpDebugEvent.dwThreadId,h)) or (h=0)) then
+    begin
+      h:=OpenTargetThread(lpDebugEvent.dwThreadId);
+      if h=0 then
+      begin
+        VEHDebugView^.ContinueMethod:=DBG_EXCEPTION_NOT_HANDLED;
+        SetEvent(HasHandledDebugEvent);
+        exit(false);
+      end;
+
+      threads.Add(lpDebugEvent.dwThreadId,h);
+    end;
 
 
     case VEHDebugView.Exception64.ExceptionCode of
@@ -386,11 +430,7 @@ begin
         lpDebugEvent.CreateProcessInfo.hFile:=0;
         lpDebugEvent.CreateProcessInfo.hProcess:=processhandle;
 
-        if threads.GetData(lpDebugEvent.dwThreadId,lpDebugEvent.CreateProcessInfo.hThread)=false then
-        begin
-          lpDebugEvent.CreateProcessInfo.hThread:=OpenThread(THREAD_ALL_ACCESS,false, lpDebugEvent.dwThreadId);
-          threads.Add(lpDebugEvent.dwThreadId,lpDebugEvent.CreateProcessInfo.hThread);
-        end;
+        threads.GetData(lpDebugEvent.dwThreadId,lpDebugEvent.CreateProcessInfo.hThread);
 
         currentthread:=lpDebugEvent.CreateProcessInfo.hThread;
         suspendthread(CurrentThread);
@@ -399,11 +439,7 @@ begin
       $ce000001: //create thread
       begin
         lpDebugEvent.dwDebugEventCode:=CREATE_THREAD_DEBUG_EVENT;
-        if threads.GetData(lpDebugEvent.dwThreadId,lpDebugEvent.CreateThread.hThread)=false then
-        begin
-          lpDebugEvent.CreateThread.hThread:=OpenThread(THREAD_ALL_ACCESS,false, lpDebugEvent.dwThreadId);
-          threads.Add(lpDebugEvent.dwThreadId, lpDebugEvent.CreateThread.hThread);
-        end;
+        threads.GetData(lpDebugEvent.dwThreadId,lpDebugEvent.CreateThread.hThread);
         lpDebugEvent.CreateThread.lpStartAddress:=nil;
         lpDebugEvent.CreateThread.lpThreadLocalBase:=nil;
         lastthreadlist.Add(inttohex(lpDebugEvent.dwThreadId,1));
