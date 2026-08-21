@@ -128,11 +128,54 @@ jobs:
           $msbuild = Join-Path $vsPath 'MSBuild\Current\Bin\MSBuild.exe'
           if (-not (Test-Path $msbuild)) { throw "MSBuild was not found: $msbuild" }
 
+          $dumpbin = Get-ChildItem (Join-Path $vsPath 'VC\Tools\MSVC\*\bin\Hostx64\x64\dumpbin.exe') -ErrorAction SilentlyContinue |
+            Sort-Object FullName -Descending |
+            Select-Object -First 1
+          if (-not $dumpbin) { throw 'dumpbin.exe was not found.' }
+
           "MSBUILD=$msbuild" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "DUMPBIN=$($dumpbin.FullName)" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
           "WDK_BUILD_VERSION=$($wdkBuild.Name)" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
           Write-Host "Using WDK build targets: $wdkTargets"
           Write-Host "Using WDK build content: $env:WDK_VERSION"
           & $msbuild -version
+
+      - name: Build TCC runtime DLLs
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $project = 'Cheat Engine\tcclib\win32\tcc\tcc\tcc.vcxproj'
+          $builds = @(
+            @{ Configuration = 'Output to 32 (Release)'; Platform = 'Win32'; Target = 'tcc32-32' },
+            @{ Configuration = 'Output to 32 (Release)'; Platform = 'x64'; Target = 'tcc64-32' },
+            @{ Configuration = 'Output to 64 (Release)'; Platform = 'x64'; Target = 'tcc64-64' },
+            @{ Configuration = 'Output to 32 Linux ABI (Release)'; Platform = 'x64'; Target = 'tcc64-32-linux' },
+            @{ Configuration = 'Output to 64 Linux ABI (Release)'; Platform = 'x64'; Target = 'tcc64-64-linux' }
+          )
+
+          $outputs = @($builds | ForEach-Object { "Cheat Engine\bin\$($_.Target).dll" })
+          Remove-Item $outputs -Force -ErrorAction SilentlyContinue
+
+          foreach ($build in $builds) {
+            $arguments = @(
+              $project,
+              '/t:Rebuild',
+              '/m:1',
+              "/p:Configuration=$($build.Configuration)",
+              "/p:Platform=$($build.Platform)",
+              "/p:TargetName=$($build.Target)",
+              '/p:PlatformToolset=v143',
+              '/p:WindowsTargetPlatformVersion=10.0'
+            )
+            & $env:MSBUILD @arguments
+            if ($LASTEXITCODE -ne 0) {
+              throw "The $($build.Target) TCC runtime build failed."
+            }
+          }
+
+          $missing = $outputs | Where-Object { -not (Test-Path $_) }
+          if ($missing) { throw "TCC runtime output is incomplete:`n$($missing -join "`n")" }
+          Remove-Item 'Cheat Engine\bin\tcc*.exp', 'Cheat Engine\bin\tcc*.lib', 'Cheat Engine\bin\tcc*.pdb' -Force -ErrorAction SilentlyContinue
 
       - name: Build Direct3D hook DLLs
         shell: pwsh
@@ -188,6 +231,22 @@ jobs:
           & $env:LAZBUILD '--build-mode=Release 64-Bit O4 AVX2' '--build-all' 'cheatengine.lpi'
           if ($LASTEXITCODE -ne 0) { throw 'The AVX2 64-bit release build failed.' }
 
+      - name: Build speedhack fallback DLLs
+        shell: pwsh
+        working-directory: Cheat Engine
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $outputs = 'bin\speedhack-i386.dll', 'bin\speedhack-x86_64.dll'
+          Remove-Item $outputs -Force -ErrorAction SilentlyContinue
+
+          & $env:LAZBUILD '--build-mode=32-bit' '--build-all' 'speedhack\speedhack.lpi'
+          if ($LASTEXITCODE -ne 0) { throw 'The 32-bit speedhack DLL build failed.' }
+          & $env:LAZBUILD '--build-mode=64-bit' '--build-all' 'speedhack\speedhack.lpi'
+          if ($LASTEXITCODE -ne 0) { throw 'The 64-bit speedhack DLL build failed.' }
+
+          $missing = $outputs | Where-Object { -not (Test-Path $_) }
+          if ($missing) { throw "Speedhack output is incomplete:`n$($missing -join "`n")" }
+
       - name: Build unsigned DBK drivers
         shell: pwsh
         run: |
@@ -225,6 +284,13 @@ jobs:
             'bin\libmikmod64.dll',
             'bin\libipt-32.dll',
             'bin\libipt-64.dll',
+            'bin\tcc32-32.dll',
+            'bin\tcc64-32.dll',
+            'bin\tcc64-64.dll',
+            'bin\tcc64-32-linux.dll',
+            'bin\tcc64-64-linux.dll',
+            'bin\speedhack-i386.dll',
+            'bin\speedhack-x86_64.dll',
             'bin\d3dhook.dll',
             'bin\d3dhook64.dll',
             'bin\ced3d9hook.dll',
@@ -235,8 +301,18 @@ jobs:
             'bin\CED3D11Hook64.dll',
             'bin\main.lua',
             'bin\autorun',
+            'bin\autorun\dlls\32\CEJVMTI.dll',
+            'bin\autorun\dlls\64\CEJVMTI.dll',
+            'bin\clibs32\lfs.dll',
+            'bin\clibs64\lfs.dll',
             'bin\win32\dbghelp.dll',
+            'bin\win32\sqlite3.dll',
+            'bin\win32\symsrv.dll',
             'bin\win64\dbghelp.dll',
+            'bin\win64\sqlite3.dll',
+            'bin\win64\symsrv.dll',
+            'bin\win64\old\dbghelp.dll',
+            'bin\win64\old\symsrv.dll',
             'bin\DBK32.sys',
             'bin\DBK64.sys'
           )
@@ -261,6 +337,57 @@ jobs:
 
           if ((Get-PeMachine 'bin\DBK32.sys') -ne 0x014c) { throw 'DBK32.sys is not an x86 PE image.' }
           if ((Get-PeMachine 'bin\DBK64.sys') -ne 0x8664) { throw 'DBK64.sys is not an x64 PE image.' }
+          foreach ($binary in 'bin\tcc32-32.dll', 'bin\speedhack-i386.dll') {
+            if ((Get-PeMachine $binary) -ne 0x014c) { throw "$binary is not an x86 PE image." }
+          }
+          foreach ($binary in @(
+            'bin\tcc64-32.dll',
+            'bin\tcc64-64.dll',
+            'bin\tcc64-32-linux.dll',
+            'bin\tcc64-64-linux.dll',
+            'bin\speedhack-x86_64.dll'
+          )) {
+            if ((Get-PeMachine $binary) -ne 0x8664) { throw "$binary is not an x64 PE image." }
+          }
+
+          function Assert-PeExports([string] $path, [string[]] $requiredExports) {
+            $exports = & $env:DUMPBIN '/nologo' '/exports' $path
+            if ($LASTEXITCODE -ne 0) { throw "Could not inspect exports in $path." }
+            foreach ($requiredExport in $requiredExports) {
+              if (-not ($exports | Select-String -Pattern "\s$([regex]::Escape($requiredExport))(\s|$)")) {
+                throw "$path is missing the $requiredExport export."
+              }
+            }
+          }
+
+          $tccExports = @(
+            'tcc_new',
+            'tcc_set_options',
+            'tcc_add_include_path',
+            'tcc_compile_string',
+            'tcc_output_file',
+            'tcc_delete',
+            'tcc_get_stab',
+            'tcc_install_filehook'
+          )
+          foreach ($binary in @(
+            'bin\tcc32-32.dll',
+            'bin\tcc64-32.dll',
+            'bin\tcc64-64.dll',
+            'bin\tcc64-32-linux.dll',
+            'bin\tcc64-64-linux.dll'
+          )) {
+            Assert-PeExports $binary $tccExports
+          }
+          foreach ($binary in 'bin\speedhack-i386.dll', 'bin\speedhack-x86_64.dll') {
+            Assert-PeExports $binary @(
+              'InitializeSpeedhack',
+              'speedhackversion_GetTickCount',
+              'speedhackversion_GetTickCount64',
+              'speedhackversion_QueryPerformanceCounter'
+            )
+          }
+
           foreach ($driver in 'bin\DBK32.sys', 'bin\DBK64.sys') {
             $signature = Get-AuthenticodeSignature $driver
             if ($signature.Status -ne 'NotSigned') { throw "$driver must remain unsigned, but its signature status is $($signature.Status)." }
@@ -330,6 +457,50 @@ jobs:
               }
               if ($archive.Entries | Where-Object Name -In 'DBK32.sys', 'DBK64.sys') {
                 throw "A DBK driver was included in the application package: $archivePath"
+              }
+
+              $entryPaths = @($archive.Entries | ForEach-Object { $_.FullName.Replace('\', '/') })
+              $requiredDlls = @(
+                'bin/lua53-32.dll',
+                'bin/lua53-64.dll',
+                'bin/libmikmod32.dll',
+                'bin/libmikmod64.dll',
+                'bin/libipt-32.dll',
+                'bin/libipt-64.dll',
+                'bin/tcc32-32.dll',
+                'bin/tcc64-32.dll',
+                'bin/tcc64-64.dll',
+                'bin/tcc64-32-linux.dll',
+                'bin/tcc64-64-linux.dll',
+                'bin/speedhack-i386.dll',
+                'bin/speedhack-x86_64.dll',
+                'bin/d3dhook.dll',
+                'bin/d3dhook64.dll',
+                'bin/ced3d9hook.dll',
+                'bin/ced3d9hook64.dll',
+                'bin/CED3D10Hook.dll',
+                'bin/CED3D10Hook64.dll',
+                'bin/CED3D11Hook.dll',
+                'bin/CED3D11Hook64.dll',
+                'bin/autorun/dlls/32/CEJVMTI.dll',
+                'bin/autorun/dlls/64/CEJVMTI.dll',
+                'bin/clibs32/lfs.dll',
+                'bin/clibs64/lfs.dll',
+                'bin/win32/dbghelp.dll',
+                'bin/win32/sqlite3.dll',
+                'bin/win32/symsrv.dll',
+                'bin/win64/dbghelp.dll',
+                'bin/win64/sqlite3.dll',
+                'bin/win64/symsrv.dll',
+                'bin/win64/old/dbghelp.dll',
+                'bin/win64/old/symsrv.dll'
+              )
+              $missingDlls = @($requiredDlls | Where-Object {
+                $requiredPath = $_
+                -not ($entryPaths | Where-Object { $_ -eq $requiredPath -or $_.EndsWith("/$requiredPath") })
+              })
+              if ($missingDlls) {
+                throw "Application archive is missing runtime DLLs:`n$($missingDlls -join "`n")"
               }
             } finally {
               $archive.Dispose()
