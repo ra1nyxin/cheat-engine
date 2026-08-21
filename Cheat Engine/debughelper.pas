@@ -2423,11 +2423,14 @@ var
   startModuleBase: ptruint;
   startModuleSize: dword;
   processSuspended: boolean;
+  installationComplete: boolean;
 begin
   debuggercs.enter;
   try
     setlength(bplist,0);
     processSuspended:=false;
+    installationComplete:=false;
+    bp:=nil;
 
     if CurrentDebuggerInterface is TGDBServerDebuggerInterface then
       breakpointmethod:=bpmGDB;
@@ -2458,47 +2461,48 @@ begin
       end;
     end;
 
-    if startcondition<>'' then
-    begin
-      {$ifdef darwin}
-      processSuspended:=task_suspend(processhandle)=0;
-      {$endif}
-      {$ifdef windows}
-      if assigned(ntSuspendProcess) and assigned(ntResumeProcess) then
-        processSuspended:=ntSuspendProcess(processhandle)=0;
-      {$endif}
-    end;
-
     try
-      if stayInsideModule then
+      if startcondition<>'' then
       begin
-        if symhandler.getmodulebyaddress(address, mi) then
+        {$ifdef darwin}
+        processSuspended:=task_suspend(processhandle)=0;
+        {$endif}
+        {$ifdef windows}
+        if assigned(ntSuspendProcess) and assigned(ntResumeProcess) then
+          processSuspended:=ntSuspendProcess(processhandle)=0;
+        {$endif}
+      end;
+
+      try
+        if stayInsideModule then
         begin
-          startModuleBase:=mi.baseaddress;
-          startModuleSize:=mi.basesize;
-        end
-        else
-          stayInsideModule:=false;
+          if symhandler.getmodulebyaddress(address, mi) then
+          begin
+            startModuleBase:=mi.baseaddress;
+            startModuleSize:=mi.basesize;
+          end
+          else
+            stayInsideModule:=false;
+        end;
+
+        bp:=AddBreakpoint(nil, address, bpsize, BreakpointTrigger, breakpointmethod, bo_BreakAndTrace, usedDebugRegister,  nil, 0, nil,frmTracer,count);
+
+        if (startcondition<>'') and (bp<>nil) then
+          setbreakpointcondition(bp, true, startcondition);
+      finally
+        if processSuspended then
+        begin
+        {$ifdef darwin}
+          task_resume(processhandle);
+        {$endif}
+        {$ifdef windows}
+          ntResumeProcess(processhandle);
+        {$endif}
+        end;
       end;
 
-      bp:=AddBreakpoint(nil, address, bpsize, BreakpointTrigger, breakpointmethod, bo_BreakAndTrace, usedDebugRegister,  nil, 0, nil,frmTracer,count);
+      if bp=nil then exit;
 
-      if (startcondition<>'') and (bp<>nil) then
-        setbreakpointcondition(bp, true, startcondition);
-    finally
-      if processSuspended then
-      begin
-      {$ifdef darwin}
-        task_resume(processhandle);
-      {$endif}
-      {$ifdef windows}
-        ntResumeProcess(processhandle);
-      {$endif}
-      end;
-    end;
-
-    if bp<>nil then
-    begin
       bp^.traceendcondition:=strnew(pchar(stopcondition));
       bp^.traceStepOver:=stepover;
       bp^.traceStepOverRep:=stepoverrep;
@@ -2509,27 +2513,31 @@ begin
         bp^.traceStartmodulebase:=startModuleBase;
         bp^.traceStartmodulesize:=startModuleSize;
       end;
-    end;
 
-
-    for i:=1 to length(bplist)-1 do
-    begin
-      useddebugregister:=GetUsableDebugRegister(breakpointtrigger);
-      if useddebugregister=-1 then exit;
-
-      bpsecondary:=AddBreakpoint(bp, bplist[i].address, bplist[i].size, BreakpointTrigger, breakpointmethod, bo_BreakAndTrace, usedDebugregister,  nil, 0, nil,frmTracer,count);
-      bpsecondary.traceendcondition:=strnew(pchar(stopcondition));
-      bpsecondary.traceStepOver:=stepover;
-      bpsecondary.traceNosystem:=nosystem;
-      bpsecondary.traceStayInsideModule:=stayInsideModule;
-      if stayInsideModule then
+      for i:=1 to length(bplist)-1 do
       begin
-        bpsecondary.traceStartmodulebase:=startModuleBase;
-        bpsecondary.traceStartmodulesize:=startModuleSize;
+        useddebugregister:=GetUsableDebugRegister(breakpointtrigger);
+        if useddebugregister=-1 then exit;
+
+        bpsecondary:=AddBreakpoint(bp, bplist[i].address, bplist[i].size, BreakpointTrigger, breakpointmethod, bo_BreakAndTrace, usedDebugregister,  nil, 0, nil,frmTracer,count);
+        if bpsecondary=nil then exit;
+
+        bpsecondary.traceendcondition:=strnew(pchar(stopcondition));
+        bpsecondary.traceStepOver:=stepover;
+        bpsecondary.traceNosystem:=nosystem;
+        bpsecondary.traceStayInsideModule:=stayInsideModule;
+        if stayInsideModule then
+        begin
+          bpsecondary.traceStartmodulebase:=startModuleBase;
+          bpsecondary.traceStartmodulesize:=startModuleSize;
+        end;
       end;
+
+      installationComplete:=true;
+    finally
+      if (bp<>nil) and not installationComplete then
+        RemoveBreakpoint(bp);
     end;
-
-
   finally
     debuggercs.leave;
   end;
