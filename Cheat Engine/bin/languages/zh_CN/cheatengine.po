@@ -1,15 +1,390 @@
 msgid ""
 msgstr ""
-"Content-Type: text/plain; charset=UTF-8\n"
 "Project-Id-Version: \n"
 "POT-Creation-Date: \n"
 "PO-Revision-Date: \n"
 "Last-Translator: Blank QQ：542850148\n"
 "Language-Team: \n"
 "MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
 "Language: zh_CN\n"
 "X-Generator: Poedit 2.0.8\n"
+
+#: tmemorybrowser.caption
+msgctxt "TMEMORYBROWSER.CAPTION"
+msgid "Memory Viewer"
+msgstr "内存查看器"
+
+#: tmemorybrowser.lblregisters.caption
+msgctxt "TMEMORYBROWSER.LBLREGISTERS.CAPTION"
+msgid "Registers:"
+msgstr "寄存器："
+
+#: tmemorybrowser.lblflags.caption
+msgctxt "TMEMORYBROWSER.LBLFLAGS.CAPTION"
+msgid "Flags"
+msgstr "标志"
+
+#: tmemorybrowser.lblspecial.caption
+msgctxt "TMEMORYBROWSER.LBLSPECIAL.CAPTION"
+msgid "Special"
+msgstr "特殊寄存器"
+
+#: tmemorybrowser.tbtogglebreakpoint.caption
+msgctxt "TMEMORYBROWSER.TBTOGGLEBREAKPOINT.CAPTION"
+msgid "Toggle Breakpoint"
+msgstr "切换断点"
+
+#: tmemorybrowser.tbrun.caption
+msgctxt "TMEMORYBROWSER.TBRUN.CAPTION"
+msgid "Run"
+msgstr "运行"
+
+#: tmemorybrowser.tbstepinto.caption
+msgctxt "TMEMORYBROWSER.TBSTEPINTO.CAPTION"
+msgid "Step Into"
+msgstr "单步进入"
+
+#: tmemorybrowser.tbstepover.caption
+msgctxt "TMEMORYBROWSER.TBSTEPOVER.CAPTION"
+msgid "Step Over"
+msgstr "单步跳过"
+
+#: tmemorybrowser.tbstepout.caption
+msgctxt "TMEMORYBROWSER.TBSTEPOUT.CAPTION"
+msgid "Step Out"
+msgstr "单步跳出"
+
+#: tmemorybrowser.tbruntill.caption
+msgctxt "TMEMORYBROWSER.TBRUNTILL.CAPTION"
+msgid "Run till..."
+msgstr "运行到……"
+
+#: tmemorybrowser.tbrununhandled.caption
+msgctxt "TMEMORYBROWSER.TBRUNUNHANDLED.CAPTION"
+msgid "Run Unhandled"
+msgstr "运行未处理异常"
+
+#: tmemorybrowser.miclearcache.caption
+msgctxt "TMEMORYBROWSER.MICLEARCACHE.CAPTION"
+msgid "Clear GDB cache for this page"
+msgstr "清除此页的 GDB 缓存"
+
+#: tmemorybrowser.misearchforaccessiblestrings.caption
+msgctxt "TMEMORYBROWSER.MISEARCHFORACCESSIBLESTRINGS.CAPTION"
+msgid "Search for accessible strings"
+msgstr "搜索可访问的字符串"
+
+#: tmemorybrowser.mitextencoding.caption
+msgctxt "TMEMORYBROWSER.MITEXTENCODING.CAPTION"
+msgid "Text Encoding"
+msgstr "文本编码"
+
+#: tmemorybrowser.mitextencodingascii.caption
+msgctxt "TMEMORYBROWSER.MITEXTENCODINGASCII.CAPTION"
+msgid "Ascii"
+msgstr "ASCII"
+
+#: tmemorybrowser.mitextencodingutf8.caption
+msgctxt "TMEMORYBROWSER.MITEXTENCODINGUTF8.CAPTION"
+msgid "UTF-8"
+msgstr "UTF-8"
+
+#: tmemorybrowser.mitextencoding16.caption
+msgctxt "TMEMORYBROWSER.MITEXTENCODING16.CAPTION"
+msgid "UTF-16"
+msgstr "UTF-16"
+
+#: tmemorybrowser.milockrowsize.caption
+msgctxt "TMEMORYBROWSER.MILOCKROWSIZE.CAPTION"
+msgid "Set custom alignment"
+msgstr "设置自定义对齐"
+
+#: tmemorybrowser.miopenindissectdata.caption
+msgctxt "TMEMORYBROWSER.MIOPENINDISSECTDATA.CAPTION"
+msgid "Open in dissect data/structure"
+msgstr "在数据/结构分析器中打开"
+
+#: tmemorybrowser.menuitem9.caption
+msgctxt "TMEMORYBROWSER.MENUITEM9.CAPTION"
+msgid "Change fade timer"
+msgstr "更改淡出计时器"
+
+#: tmemorybrowser.midatabreakpointmenu.caption
+msgctxt "TMEMORYBROWSER.MIDATABREAKPOINTMENU.CAPTION"
+msgid "Data Breakpoint"
+msgstr "数据断点"
+
+#: tmemorybrowser.mibreakandtrace.caption
+msgctxt "TMEMORYBROWSER.MIBREAKANDTRACE.CAPTION"
+msgid "Break and trace"
+msgstr "中断并跟踪"
+
+#: tmemorybrowser.misetunsetbookmark.caption
+msgctxt "TMEMORYBROWSER.MISETUNSETBOOKMARK.CAPTION"
+msgid "Set/Unset bookmark"
+msgstr "设置/取消书签"
+
+#: tmemorybrowser.migotobookmark.caption
+msgctxt "TMEMORYBROWSER.MIGOTOBOOKMARK.CAPTION"
+msgid "Goto bookmark"
+msgstr "转到书签"
+
+#: tmemorybrowser.miundolastedit.caption
+msgctxt "TMEMORYBROWSER.MIUNDOLASTEDIT.CAPTION"
+msgid "Undo last edit"
+msgstr "撤销上次编辑"
+
+#: tmemorybrowser.mishowrelativedisassembler.caption
+msgctxt "TMEMORYBROWSER.MISHOWRELATIVEDISASSEMBLER.CAPTION"
+msgid "Show relative addresses"
+msgstr "显示相对地址"
+
+#: tmemorybrowser.copybytesandopcodesandcomments.caption
+msgctxt "TMEMORYBROWSER.COPYBYTESANDOPCODESANDCOMMENTS.CAPTION"
+msgid "Bytes+Opcodes+Comments"
+msgstr "字节+操作码+注释"
+
+#: tmemorybrowser.micopyopcodesonly.caption
+msgctxt "TMEMORYBROWSER.MICOPYOPCODESONLY.CAPTION"
+msgid "Opcodes only (no address)"
+msgstr "仅操作码（无地址）"
+
+#: tmemorybrowser.midbvmfindoutwhataddressesthisinstructionaccesses.caption
+msgctxt "TMEMORYBROWSER.MIDBVMFINDOUTWHATADDRESSESTHISINSTRUCTIONACCESSES.CAPTION"
+msgid "DBVM Find out what addresses this instruction accesses"
+msgstr "DBVM 查找此指令访问的地址"
+
+#: tmemorybrowser.miselectcurrentfunction.caption
+msgctxt "TMEMORYBROWSER.MISELECTCURRENTFUNCTION.CAPTION"
+msgid "Select current function"
+msgstr "选择当前函数"
+
+#: tmemorybrowser.miloadtrace.caption
+msgctxt "TMEMORYBROWSER.MILOADTRACE.CAPTION"
+msgid "Load trace"
+msgstr "加载跟踪"
+
+#: tmemorybrowser.miiptlog.caption
+msgctxt "TMEMORYBROWSER.MIIPTLOG.CAPTION"
+msgid "IPT Log"
+msgstr "IPT 日志"
+
+#: tmemorybrowser.miwatchlist.caption
+msgctxt "TMEMORYBROWSER.MIWATCHLIST.CAPTION"
+msgid "Watchlist"
+msgstr "监视列表"
+
+#: tmemorybrowser.miuserwriteinteger.caption
+msgctxt "TMEMORYBROWSER.MIUSERWRITEINTEGER.CAPTION"
+msgid "User write history"
+msgstr "用户写入历史"
+
+#: tmemorybrowser.mishowsymbols.caption
+msgctxt "TMEMORYBROWSER.MISHOWSYMBOLS.CAPTION"
+msgid "Show symbols"
+msgstr "显示符号"
+
+#: tmemorybrowser.mikernelmodesymbols.caption
+msgctxt "TMEMORYBROWSER.MIKERNELMODESYMBOLS.CAPTION"
+msgid "Kernelmode symbols"
+msgstr "内核模式符号"
+
+#: tmemorybrowser.mishowsectionaddresses.caption
+msgctxt "TMEMORYBROWSER.MISHOWSECTIONADDRESSES.CAPTION"
+msgid "Show section addresses"
+msgstr "显示节地址"
+
+#: tmemorybrowser.mishowmoduleaddresses.caption
+msgctxt "TMEMORYBROWSER.MISHOWMODULEADDRESSES.CAPTION"
+msgid "Show module addresses"
+msgstr "显示模块地址"
+
+#: tmemorybrowser.miuserdefinedsymbols.caption
+msgctxt "TMEMORYBROWSER.MIUSERDEFINEDSYMBOLS.CAPTION"
+msgid "Userdefined symbols"
+msgstr "用户定义符号"
+
+#: tmemorybrowser.miarchitecture.caption
+msgctxt "TMEMORYBROWSER.MIARCHITECTURE.CAPTION"
+msgid "Architecture"
+msgstr "架构"
+
+#: tmemorybrowser.miarchautodetect.caption
+msgctxt "TMEMORYBROWSER.MIARCHAUTODETECT.CAPTION"
+msgid "Autodetect"
+msgstr "自动检测"
+
+#: tmemorybrowser.miarchx86.caption
+msgctxt "TMEMORYBROWSER.MIARCHX86.CAPTION"
+msgid "X86"
+msgstr "X86"
+
+#: tmemorybrowser.miarcharm.caption
+msgctxt "TMEMORYBROWSER.MIARCHARM.CAPTION"
+msgid "ARM"
+msgstr "ARM"
+
+#: tmemorybrowser.mibinutils.caption
+msgctxt "TMEMORYBROWSER.MIBINUTILS.CAPTION"
+msgid "BinUtils"
+msgstr "二进制工具"
+
+#: tmemorybrowser.micr3switcher.caption
+msgctxt "TMEMORYBROWSER.MICR3SWITCHER.CAPTION"
+msgid "CR3 Switcher"
+msgstr "CR3 切换器"
+
+#: tmemorybrowser.midebugstep.caption
+msgctxt "TMEMORYBROWSER.MIDEBUGSTEP.CAPTION"
+msgid "Step Into"
+msgstr "单步进入"
+
+#: tmemorybrowser.midebugstepover.caption
+msgctxt "TMEMORYBROWSER.MIDEBUGSTEPOVER.CAPTION"
+msgid "Step Over"
+msgstr "单步跳过"
+
+#: tmemorybrowser.midebugexecutetillreturn.caption
+msgctxt "TMEMORYBROWSER.MIDEBUGEXECUTETILLRETURN.CAPTION"
+msgid "Step Out - Execute till return"
+msgstr "单步跳出 - 执行到返回"
+
+#: tmemorybrowser.micomparestructures.caption
+msgctxt "TMEMORYBROWSER.MICOMPARESTRUCTURES.CAPTION"
+msgid "Compare data/structures"
+msgstr "比较数据/结构"
+
+#: tmemorybrowser.miultimap.caption
+msgctxt "TMEMORYBROWSER.MIULTIMAP.CAPTION"
+msgid "Ultimap"
+msgstr "Ultimap"
+
+#: tmemorybrowser.miultimap2.caption
+msgctxt "TMEMORYBROWSER.MIULTIMAP2.CAPTION"
+msgid "Ultimap 2"
+msgstr "Ultimap 2"
+
+#: tmemorybrowser.miwatchmemorypageaccess.caption
+msgctxt "TMEMORYBROWSER.MIWATCHMEMORYPAGEACCESS.CAPTION"
+msgid "Watch memory page access"
+msgstr "监视内存页访问"
+
+#: tmemorybrowser.miaddesp.caption
+msgctxt "TMEMORYBROWSER.MIADDESP.CAPTION"
+msgid "(esp+*)"
+msgstr "(esp+*)"
+
+#: tmemorybrowser.miaddebp.caption
+msgctxt "TMEMORYBROWSER.MIADDEBP.CAPTION"
+msgid "(ebp+*)"
+msgstr "(ebp+*)"
+
+#: tmemorybrowser.miaddref.caption
+msgctxt "TMEMORYBROWSER.MIADDREF.CAPTION"
+msgid "(ref+*) Ref will be %x"
+msgstr "(ref+*) 引用为 %x"
+
+#: tmemorybrowser.mifollowinhexview.caption
+msgctxt "TMEMORYBROWSER.MIFOLLOWINHEXVIEW.CAPTION"
+msgid "Follow in hexview when stepping"
+msgstr "单步执行时在十六进制视图中跟随"
+
+#: tmemorybrowser.menuitem4.caption
+msgctxt "TMEMORYBROWSER.MENUITEM4.CAPTION"
+msgid "Disable toolbar"
+msgstr "禁用工具栏"
+
+#: tmemorybrowser.mihvfollow.caption
+msgctxt "TMEMORYBROWSER.MIHVFOLLOW.CAPTION"
+msgid "Follow"
+msgstr "跟随"
+
+#: tmemorybrowser.cut1.caption
+msgctxt "TMEMORYBROWSER.CUT1.CAPTION"
+msgid "Copy to clipboard"
+msgstr "复制到剪贴板"
+
+#: tmemorybrowser.miwatchwrite.caption
+msgctxt "TMEMORYBROWSER.MIWATCHWRITE.CAPTION"
+msgid "Break on Write"
+msgstr "写入时中断"
+
+#: tmemorybrowser.miwatchaccess.caption
+msgctxt "TMEMORYBROWSER.MIWATCHACCESS.CAPTION"
+msgid "Break on Access"
+msgstr "访问时中断"
+
+#: tmemorybrowser.mifindwhataccesses.caption
+msgctxt "TMEMORYBROWSER.MIFINDWHATACCESSES.CAPTION"
+msgid "Find out what accesses this address"
+msgstr "查找访问此地址的指令"
+
+#: tmemorybrowser.miwatchbpdbvm.caption
+msgctxt "TMEMORYBROWSER.MIWATCHBPDBVM.CAPTION"
+msgid "DBVM Breakpoint"
+msgstr "DBVM 断点"
+
+#: tmemorybrowser.misetbookmark0.caption
+msgctxt "TMEMORYBROWSER.MISETBOOKMARK0.CAPTION"
+msgid "Bookmark 0"
+msgstr "书签 0"
+
+#: tmemorybrowser.misetbookmark1.caption
+msgctxt "TMEMORYBROWSER.MISETBOOKMARK1.CAPTION"
+msgid "Bookmark 1"
+msgstr "书签 1"
+
+#: tmemorybrowser.misetbookmark2.caption
+msgctxt "TMEMORYBROWSER.MISETBOOKMARK2.CAPTION"
+msgid "Bookmark 2"
+msgstr "书签 2"
+
+#: tmemorybrowser.misetbookmark3.caption
+msgctxt "TMEMORYBROWSER.MISETBOOKMARK3.CAPTION"
+msgid "Bookmark 3"
+msgstr "书签 3"
+
+#: tmemorybrowser.misetbookmark4.caption
+msgctxt "TMEMORYBROWSER.MISETBOOKMARK4.CAPTION"
+msgid "Bookmark 4"
+msgstr "书签 4"
+
+#: tmemorybrowser.misetbookmark5.caption
+msgctxt "TMEMORYBROWSER.MISETBOOKMARK5.CAPTION"
+msgid "Bookmark 5"
+msgstr "书签 5"
+
+#: tmemorybrowser.misetbookmark6.caption
+msgctxt "TMEMORYBROWSER.MISETBOOKMARK6.CAPTION"
+msgid "Bookmark 6"
+msgstr "书签 6"
+
+#: tmemorybrowser.misetbookmark7.caption
+msgctxt "TMEMORYBROWSER.MISETBOOKMARK7.CAPTION"
+msgid "Bookmark 7"
+msgstr "书签 7"
+
+#: tmemorybrowser.misetbookmark8.caption
+msgctxt "TMEMORYBROWSER.MISETBOOKMARK8.CAPTION"
+msgid "Bookmark 8"
+msgstr "书签 8"
+
+#: tmemorybrowser.misetbookmark9.caption
+msgctxt "TMEMORYBROWSER.MISETBOOKMARK9.CAPTION"
+msgid "Bookmark 9"
+msgstr "书签 9"
+
+#: tmemorybrowser.misetspecificbreakpoint.caption
+msgctxt "TMEMORYBROWSER.MISETSPECIFICBREAKPOINT.CAPTION"
+msgid "Set specific breakpoint type"
+msgstr "设置指定断点类型"
+
+#: tmemorybrowser.misetbreakpointpe.caption
+msgctxt "TMEMORYBROWSER.MISETBREAKPOINTPE.CAPTION"
+msgid "Exception Breakpoint (+1 instruction)"
+msgstr "异常断点（+1 条指令）"
 
 #: aboutunit.rsareyousureyouwanttolaunchdbvm
 msgid "Are you sure you want to launch DBVM? You seem to be running in 32-bit, so don't really need it that badly (Except for ultimap and cloaked operations)"
@@ -2475,7 +2850,10 @@ msgid ""
 "Not all code is injectable.\n"
 "%s\n"
 "Are you sure you want to edit it to this?\n"
-msgstr "不是所有的代码都能被注入.\n%s\n你确定不用再修改了吗?\n"
+msgstr ""
+"不是所有的代码都能被注入.\n"
+"%s\n"
+"你确定不用再修改了吗?\n"
 
 #: frmautoinjectunit.rsonwhataddressdoyouwantthejump
 msgid "On what address do you want the jump?"
@@ -3027,7 +3405,9 @@ msgstr ""
 msgid ""
 "Moves the source .ptr.# files to the working folder of the main PTR\n"
 "Note: This destroys the source\n"
-msgstr "移动源 .ptr.#文件 到主PTR目录\n备注: 可能会损坏源文件\n"
+msgstr ""
+"移动源 .ptr.#文件 到主PTR目录\n"
+"备注: 可能会损坏源文件\n"
 
 #: frmmodifyregistersunit.rsmodifyregisterssat
 msgid "Modify registers(s) at %s"
@@ -3697,7 +4077,9 @@ msgstr "已暂停"
 msgid ""
 "Processing\n"
 "Data\n"
-msgstr "已处理\n数据\n"
+msgstr ""
+"已处理\n"
+"数据\n"
 
 #: frmultimap2unit.rsputbetweentomarsasanautostoprange
 msgid "(Put between *'s to mark as an auto stop range)"
@@ -4001,7 +4383,11 @@ msgid ""
 "The text to speak\n"
 "%s = The description field of the memory record\n"
 "%s = The description of the hotkey\n"
-msgstr "说明文本\n%s = 记录内存段的描述\n\n%s = 热键的描述\n"
+msgstr ""
+"说明文本\n"
+"%s = 记录内存段的描述\n"
+"\n"
+"%s = 热键的描述\n"
 
 #: hotkeys.rstogglefreeze
 msgid "Toggle freeze"
@@ -5143,7 +5529,37 @@ msgstr "至少 %s 字节已分配 %s. 跳转过去吗?"
 
 #: memorybrowserformunit.rsbecauseofunhandledexeption
 msgid "Because of unhandled exception %s"
-msgstr ""
+msgstr "因为发生未处理异常 %s"
+
+#: memorybrowserformunit.rssomethinghappened
+msgctxt "memorybrowserformunit.rssomethinghappened"
+msgid "something happened"
+msgstr "发生了某些情况"
+
+#: memorybrowserformunit.rssetbreakpoint
+msgctxt "memorybrowserformunit.rssetbreakpoint"
+msgid "Set breakpoint"
+msgstr "设置断点"
+
+#: memorybrowserformunit.rsremovebreakpoint
+msgctxt "memorybrowserformunit.rsremovebreakpoint"
+msgid "Remove breakpoint"
+msgstr "移除断点"
+
+#: memorybrowserformunit.rsinjectdylib
+msgctxt "memorybrowserformunit.rsinjectdylib"
+msgid "Inject DYLIB"
+msgstr "注入 DYLIB"
+
+#: memorybrowserformunit.rssetcustomalignment
+msgctxt "memorybrowserformunit.rssetcustomalignment"
+msgid "Set custom alignment"
+msgstr "设置自定义对齐"
+
+#: memorybrowserformunit.rsrefwillbe
+msgctxt "memorybrowserformunit.rsrefwillbe"
+msgid "(ref+*) Ref will be %x"
+msgstr "(ref+*) 引用为 %x"
 
 #: memorybrowserformunit.rsbetween
 msgid "Between %s"
@@ -6255,7 +6671,7 @@ msgstr "插件地址"
 msgctxt "pointeraddresslist.rspalinvalidscandatafile"
 msgid "Invalid scandata file"
 msgstr "无效的 scandata文件"
- 
+
 #: pointeraddresslist.rspalinvalidscandataversion
 msgctxt "pointeraddresslist.rspalinvalidscandataversion"
 msgid "Invalid scandata version"
@@ -8024,7 +8440,7 @@ msgid ""
 "Sometimes when using one of the \"find out what...\" functions they get hit so often that the gui has no time to update, resulting in anoying behaviour like certain windows not closing or unresponsive buttons.\n"
 "With this option enabled the debugger will give the gui some time to handle the messages before it sends it a new update.\n"
 "Downside: The game may become slightly slower when using these functions. (Of course, if it has been hammering the gui, it would already have been frozen)\n"
-msgstr "有时,当使用一个\"找出是什么...\"功能时,功能实现但偶尔GUI没时间更新就会导致烦人行为, 比如像某些窗口不关闭或按键无响应."
+msgstr "有时,当使用一个\"找出是什么...\"功能时,功能实现但偶尔GUI没时间更新就会导致烦人行为, 比如像某些窗口不关闭或按键无响应.\n"
 
 #: tformsettings.cbwriteloggingon.caption
 msgid "Enable write logging by default"
@@ -8408,7 +8824,7 @@ msgstr "VEH 调试器"
 #: tformsettings.tswindowsdebuggerconfig.caption
 msgid "Windows Debugger"
 msgstr "Windows 调试器"
- 
+
 #: tformsettings.unrandomizer.caption
 msgctxt "tformsettings.unrandomizer.caption"
 msgid "Unrandomizer"
@@ -8683,7 +9099,7 @@ msgid ""
 "\n"
 "Gray:\n"
 "Don't care if it's copy-on-write or not\n"
-msgstr "选中:同时扫描可写入时拷贝的内存. 取消选中:不扫描可写入时拷贝的内存"
+msgstr "选中:同时扫描可写入时拷贝的内存. 取消选中:不扫描可写入时拷贝的内存\n"
 
 #: tmainform.cbexecutable.caption
 msgid "Executable"
@@ -8699,7 +9115,7 @@ msgid ""
 "\n"
 "Gray:\n"
 "Don't care if it's executable or not\n"
-msgstr "选中:同时扫描可写入时拷贝的内存. 取消选中:不扫描可写入时拷贝的内存"
+msgstr "选中:同时扫描可写入时拷贝的内存. 取消选中:不扫描可写入时拷贝的内存\n"
 
 #: tmainform.cbfastscan.caption
 msgid "Fast Scan"
@@ -8769,7 +9185,7 @@ msgid ""
 "\n"
 "Gray:\n"
 "Don't care if it's writable memory or not\n"
-msgstr "选中:同时扫描可写入的内存. 取消选中:不扫描可写入的内存"
+msgstr "选中:同时扫描可写入的内存. 取消选中:不扫描可写入的内存\n"
 
 #: tmainform.change1.caption
 msgid "Change record"
@@ -9748,7 +10164,7 @@ msgstr "分配内存"
 
 #: tmemorybrowser.scanforcodecaves1.caption
 msgid "Scan for code caves"
-msgstr "扫描 Code Caves"
+msgstr "扫描代码洞"
 
 #: tmemorybrowser.fillmemory1.caption
 msgid "Fill Memory"
@@ -9761,3 +10177,1075 @@ msgstr "创建线程"
 #: tmemorybrowser.kerneltools1.caption
 msgid "Kernel tools"
 msgstr "内核工具"
+
+#: tmemorybrowser.addthisaddresstothelist1.caption
+msgctxt "TMEMORYBROWSER.ADDTHISADDRESSTOTHELIST1.CAPTION"
+msgid "Add this address to the list"
+msgstr "添加这个地址到地址列表"
+
+#: tmemorybrowser.aflabel.caption
+msgctxt "tmemorybrowser.aflabel.caption"
+msgid "AF 0"
+msgstr "AF 0"
+
+#: tmemorybrowser.all1.caption
+msgid "Full stack"
+msgstr "全栈"
+
+#: tmemorybrowser.allocatenonpagedmemory1.caption
+msgid "Allocate nonpaged memory"
+msgstr "分配未分页内存"
+
+#: tmemorybrowser.assemble1.caption
+msgid "Assemble"
+msgstr "汇编"
+
+#: tmemorybrowser.assemblycode1.caption
+msgid "Find assembly code"
+msgstr "查找汇编代码"
+
+#: tmemorybrowser.autoinject1.caption
+msgid "Auto Assemble"
+msgstr "自动汇编"
+
+#: tmemorybrowser.back1.caption
+msgctxt "TMEMORYBROWSER.BACK1.CAPTION"
+msgid "Back"
+msgstr "返回"
+
+#: tmemorybrowser.breakandtraceinstructions1.caption
+msgid "Break and trace instructions"
+msgstr "中断并追踪指令"
+
+#: tmemorybrowser.breakpointlist1.caption
+msgid "Breakpointlist"
+msgstr "断点列表"
+
+#: tmemorybrowser.caption
+msgid "Memory Viewer"
+msgstr "内存查看器"
+
+#: tmemorybrowser.cflabel.caption
+msgctxt "tmemorybrowser.cflabel.caption"
+msgid "CF 0"
+msgstr "CF 0"
+
+#: tmemorybrowser.change1.caption
+msgctxt "TMEMORYBROWSER.CHANGE1.CAPTION"
+msgid "Edit"
+msgstr "编辑"
+
+#: tmemorybrowser.changestateofregisteratthislocation1.caption
+msgid "Change register at this location"
+msgstr "在这个位置更改寄存器"
+
+#: tmemorybrowser.continueanddetachdebugger1.caption
+msgid "Continue and  detach debugger"
+msgstr "继续并分离调试器"
+
+#: tmemorybrowser.copybytes.caption
+msgctxt "TMEMORYBROWSER.COPYBYTES.CAPTION"
+msgid "Bytes"
+msgstr "字节"
+
+#: tmemorybrowser.copybytesandopcodes.caption
+msgid "Bytes+Opcodes"
+msgstr "字节+操作码"
+
+#: tmemorybrowser.copyopcodes.caption
+msgid "Opcodes"
+msgstr "操作码"
+
+#: tmemorybrowser.copytoclipboard1.caption
+msgctxt "TMEMORYBROWSER.COPYTOCLIPBOARD1.CAPTION"
+msgid "Copy to clipboard"
+msgstr "复制到剪贴板"
+
+#: tmemorybrowser.cslabel.caption
+msgctxt "tmemorybrowser.cslabel.caption"
+msgid "CS 0000"
+msgstr "CS 0000"
+
+#: tmemorybrowser.cut1.caption
+msgctxt "tmemorybrowser.cut1.caption"
+msgid "Copy to clipboard"
+msgstr "复制到剪贴板"
+
+#: tmemorybrowser.dbvmfindoutwhataddressesthisinstructionaccesses.caption
+msgid "DBVM Find out what addresses this instruction accesses"
+msgstr "DBVM 找出这个指令访问什么地址"
+
+#: tmemorybrowser.debug1.caption
+msgctxt "TMEMORYBROWSER.DEBUG1.CAPTION"
+msgid "Debug"
+msgstr "调试"
+
+#: tmemorybrowser.debugstrings1.caption
+msgctxt "TMEMORYBROWSER.DEBUGSTRINGS1.CAPTION"
+msgid "Debug strings"
+msgstr "调试字符串"
+
+#: tmemorybrowser.dflabel.caption
+msgctxt "tmemorybrowser.dflabel.caption"
+msgid "DF 0"
+msgstr "DF 0"
+
+#: tmemorybrowser.disectwindow1.caption
+msgid "Dissect window(s)"
+msgstr "分析窗口"
+
+#: tmemorybrowser.dispbytes.caption
+msgid "Byte hex"
+msgstr "字节（十六进制）"
+
+#: tmemorybrowser.dispchar.caption
+msgid "Byte decimal"
+msgstr "字节（十进制）"
+
+#: tmemorybrowser.dispdouble.caption
+msgctxt "TMEMORYBROWSER.DISPDOUBLE.CAPTION"
+msgid "Double"
+msgstr "双浮点"
+
+#: tmemorybrowser.dispdwords.caption
+msgid "4 Byte hex"
+msgstr "4 字节（十六进制）"
+
+#: tmemorybrowser.dispfloat.caption
+msgctxt "TMEMORYBROWSER.DISPFLOAT.CAPTION"
+msgid "Float"
+msgstr "单浮点"
+
+#: tmemorybrowser.dispints.caption
+msgid "4 Byte decimal"
+msgstr "4 字节（十进制）"
+
+#: tmemorybrowser.displaytype1.caption
+msgid "Display Type"
+msgstr "显示类型"
+
+#: tmemorybrowser.displongs.caption
+msgid "8 Byte decimal"
+msgstr "8 字节（十进制）"
+
+#: tmemorybrowser.dispqwords.caption
+msgid "8 Byte hex"
+msgstr "8 字节（十六进制）"
+
+#: tmemorybrowser.dispshorts.caption
+msgid "2 Byte decimal"
+msgstr "2 字节（十进制）"
+
+#: tmemorybrowser.dispwords.caption
+msgid "2 Byte hex"
+msgstr "2 字节（十六进制）"
+
+#: tmemorybrowser.dissectcode1.caption
+msgid "Dissect code"
+msgstr "分析代码"
+
+#: tmemorybrowser.dissectdata1.caption
+msgctxt "TMEMORYBROWSER.DISSECTDATA1.CAPTION"
+msgid "Pointer scan"
+msgstr "指针扫描"
+
+#: tmemorybrowser.dissectpeheaders1.caption
+msgid "Dissect PE headers"
+msgstr "分析 PE 头"
+
+#: tmemorybrowser.driverlist1.caption
+msgctxt "TMEMORYBROWSER.DRIVERLIST1.CAPTION"
+msgid "Driver list"
+msgstr "驱动列表"
+
+#: tmemorybrowser.dslabel.caption
+msgctxt "tmemorybrowser.dslabel.caption"
+msgid "DS 0000"
+msgstr "DS 0000"
+
+#: tmemorybrowser.eaxlabel.caption
+msgctxt "tmemorybrowser.eaxlabel.caption"
+msgid "EAX 00000000"
+msgstr "EAX 00000000"
+
+#: tmemorybrowser.ebplabel.caption
+msgctxt "TMEMORYBROWSER.EBPLABEL.CAPTION"
+msgid "EBP 00000000"
+msgstr "EBP 00000000"
+
+#: tmemorybrowser.ebxlabel.caption
+msgctxt "TMEMORYBROWSER.EBXLABEL.CAPTION"
+msgid "EBX 00000000"
+msgstr "EBX 00000000"
+
+#: tmemorybrowser.ecxlabel.caption
+msgctxt "TMEMORYBROWSER.ECXLABEL.CAPTION"
+msgid "ECX 00000000"
+msgstr "ECX 00000000"
+
+#: tmemorybrowser.edilabel.caption
+msgctxt "TMEMORYBROWSER.EDILABEL.CAPTION"
+msgid "EDI 00000000"
+msgstr "EDI 00000000"
+
+#: tmemorybrowser.edxlabel.caption
+msgctxt "TMEMORYBROWSER.EDXLABEL.CAPTION"
+msgid "EDX 00000000"
+msgstr "EDX 00000000"
+
+#: tmemorybrowser.eiplabel.caption
+msgctxt "TMEMORYBROWSER.EIPLABEL.CAPTION"
+msgid "EIP 00000000"
+msgstr "EIP 00000000"
+
+#: tmemorybrowser.enumeratedllsandsymbols1.caption
+msgid "Enumerate DLL's and Symbols"
+msgstr "列举DLL和符号"
+
+#: tmemorybrowser.esilabel.caption
+msgctxt "TMEMORYBROWSER.ESILABEL.CAPTION"
+msgid "ESI 00000000"
+msgstr "ESI 00000000"
+
+#: tmemorybrowser.eslabel.caption
+msgctxt "tmemorybrowser.eslabel.caption"
+msgid "ES 0000"
+msgstr "ES 0000"
+
+#: tmemorybrowser.esplabel.caption
+msgctxt "TMEMORYBROWSER.ESPLABEL.CAPTION"
+msgid "ESP 00000000"
+msgstr "ESP 00000000"
+
+#: tmemorybrowser.extra1.caption
+msgctxt "TMEMORYBROWSER.EXTRA1.CAPTION"
+msgid "Tools"
+msgstr "工具"
+
+#: tmemorybrowser.file1.caption
+msgctxt "TMEMORYBROWSER.FILE1.CAPTION"
+msgid "File"
+msgstr "文件"
+
+#: tmemorybrowser.findmemory1.caption
+msgid "Find memory"
+msgstr "查找内存"
+
+#: tmemorybrowser.findoutwhataddressesthisinstructionaccesses1.caption
+msgid "Find out what addresses this instruction accesses"
+msgstr "找出这个指令访问什么地址"
+
+#: tmemorybrowser.findstaticpointers1.caption
+msgctxt "TMEMORYBROWSER.FINDSTATICPOINTERS1.CAPTION"
+msgid "Find static addresses"
+msgstr "查找静态地址"
+
+#: tmemorybrowser.follow1.caption
+msgctxt "TMEMORYBROWSER.FOLLOW1.CAPTION"
+msgid "Follow"
+msgstr "跟随"
+
+#: tmemorybrowser.fslabel.caption
+msgctxt "tmemorybrowser.fslabel.caption"
+msgid "FS 0000"
+msgstr "FS 0000"
+
+#: tmemorybrowser.gdtlist1.caption
+msgid "GDT list"
+msgstr "GDT 列表"
+
+#: tmemorybrowser.getaddress1.caption
+msgid "Get address"
+msgstr "获取地址"
+
+#: tmemorybrowser.goto1.caption
+msgid "Goto address"
+msgstr "跳转地址"
+
+#: tmemorybrowser.gotoaddress1.caption
+msgid "Go to address"
+msgstr "转到地址"
+
+#: tmemorybrowser.gslabel.caption
+msgctxt "tmemorybrowser.gslabel.caption"
+msgid "GS 0000"
+msgstr "GS 0000"
+
+#: tmemorybrowser.heaps1.caption
+msgid "Heaplist"
+msgstr "堆列表"
+
+#: tmemorybrowser.idtlist1.caption
+msgid "IDT list"
+msgstr "IDT 列表"
+
+#: tmemorybrowser.injectdll1.caption
+msgid "Inject DLL"
+msgstr "注入DLL"
+
+#: tmemorybrowser.jumplines1.caption
+msgctxt "TMEMORYBROWSER.JUMPLINES1.CAPTION"
+msgid "Jumplines"
+msgstr "跳转行"
+
+#: tmemorybrowser.kernelmodesymbols1.caption
+msgid "Kernelmode symbols"
+msgstr "内核模式符号"
+
+#: tmemorybrowser.label14.caption
+msgctxt "TMEMORYBROWSER.LABEL14.CAPTION"
+msgid "Registers:"
+msgstr "寄存器："
+
+#: tmemorybrowser.label15.caption
+msgctxt "TMEMORYBROWSER.LABEL15.CAPTION"
+msgid "Flags"
+msgstr "标志"
+
+#: tmemorybrowser.label16.caption
+msgid "Segment Registers"
+msgstr "段寄存器"
+
+#: tmemorybrowser.loadmemolryregion1.caption
+msgid "Load memory region"
+msgstr "加载内存区域"
+
+#: tmemorybrowser.loadsymbolfile1.caption
+msgid "Load symbol file"
+msgstr "加载符号文件"
+
+#: tmemorybrowser.lvstacktracedata.columns[0].caption
+msgctxt "TMEMORYBROWSER.LVSTACKTRACEDATA.COLUMNS[0].CAPTION"
+msgid "Address"
+msgstr "地址"
+
+#: tmemorybrowser.lvstacktracedata.columns[1].caption
+msgid "DWORD"
+msgstr "双字"
+
+#: tmemorybrowser.lvstacktracedata.columns[2].caption
+msgctxt "TMEMORYBROWSER.LVSTACKTRACEDATA.COLUMNS[2].CAPTION"
+msgid "Value"
+msgstr "数值"
+
+#: tmemorybrowser.lvstacktracedata.hint
+msgid ""
+"Shows the current stack.\n"
+"Tip: When doubleclicking the value and it represents an address, then you can hold shift to make it show in the disassembler, and ctrl to make it show in the memory view. Else Cheat Engine will guess it for you based on if it's executable memory or not\n"
+msgstr ""
+"显示当前栈\n"
+"提示：当双击一个数值并且它重新出现一个地址，你可以按住 shift 来使它在反编译程序里显示，按住 ctrl 使它在内存视图里显示，不然CE会基于它是不是可执行内存来进行猜测\n"
+
+#: tmemorybrowser.makepagewritable1.caption
+msgid "Change page protection"
+msgstr "更改页面保护"
+
+#: tmemorybrowser.maxstacktracesize1.caption
+msgid "Max stack: 4096"
+msgstr "最大栈：4096"
+
+#: tmemorybrowser.memoryregions1.caption
+msgid "Memory Regions"
+msgstr "内存区域"
+
+#: tmemorybrowser.menuitem10.caption
+msgid "All strings"
+msgstr "所有字符串"
+
+#: tmemorybrowser.menuitem11.caption
+msgid "Search for accessible strings"
+msgstr "搜索可访问字符串"
+
+#: tmemorybrowser.menuitem12.caption
+msgid "Apply changes to file"
+msgstr "应用更改到文件"
+
+#: tmemorybrowser.menuitem14.caption
+msgid "Use windows debug symbols"
+msgstr "使用 Windows 调试符号"
+
+#: tmemorybrowser.menuitem15.caption
+msgid "Overlay with structure"
+msgstr "用结构覆盖"
+
+#: tmemorybrowser.menuitem17.caption
+msgid "Generate structure from datastream and template"
+msgstr "从数据流和模板生成结构"
+
+#: tmemorybrowser.menuitem18.caption
+msgid "Graphical memory view"
+msgstr "图形内存视图"
+
+#: tmemorybrowser.menuitem2.caption
+msgid "Select current function"
+msgstr "选择当前函数"
+
+#: tmemorybrowser.menuitem20.caption
+msgid "Load trace"
+msgstr "加载追踪"
+
+#: tmemorybrowser.menuitem21.caption
+msgid "Text Encoding"
+msgstr "文本编码"
+
+#: tmemorybrowser.menuitem22.caption
+msgid "Watch memory page access"
+msgstr "监视内存页访问"
+
+#: tmemorybrowser.menuitem23.caption
+msgid "Set/Unset bookmark"
+msgstr "设置/撤销 书签"
+
+#: tmemorybrowser.menuitem24.caption
+msgid "Goto bookmark"
+msgstr "转到书签"
+
+#: tmemorybrowser.menuitem25.caption
+msgid "User write history"
+msgstr "用户写入历史"
+
+#: tmemorybrowser.menuitem27.caption
+msgid "Watchlist"
+msgstr "监视列表"
+
+#: tmemorybrowser.menuitem29.caption
+msgid "Compare data/structures"
+msgstr "比较数据/结构"
+
+#: tmemorybrowser.menuitem9.caption
+msgid "Change fade timer"
+msgstr "更改淡出计时器"
+
+#: tmemorybrowser.miaddtothecodelist.caption
+msgid "Add to the code list"
+msgstr "添加到代码列表"
+
+#: tmemorybrowser.mibinutils.caption
+msgid "BinUtils"
+msgstr "二进制工具"
+
+#: tmemorybrowser.mibinutilsselect.caption
+msgctxt "TMEMORYBROWSER.MIBINUTILSSELECT.CAPTION"
+msgid "None"
+msgstr "无"
+
+#: tmemorybrowser.mibreakandtrace.caption
+msgctxt "tmemorybrowser.mibreakandtrace.caption"
+msgid "Break and trace"
+msgstr "中断并跟踪"
+
+#: tmemorybrowser.mibreakonexceptions.caption
+msgid "Break on unexpected exceptions"
+msgstr "意外异常时中断"
+
+#: tmemorybrowser.michangeprotectionr.caption
+msgctxt "TMEMORYBROWSER.MICHANGEPROTECTIONR.CAPTION"
+msgid "Read"
+msgstr "读取"
+
+#: tmemorybrowser.michangeprotectionre.caption
+msgid "Read Execute"
+msgstr "读取 执行"
+
+#: tmemorybrowser.michangeprotectionrw.caption
+msgid "Read Write"
+msgstr "读取 写入"
+
+#: tmemorybrowser.michangeprotectionrwe.caption
+msgid "Read Write Execute"
+msgstr "读取 写入 执行"
+
+#: tmemorybrowser.micodefilter.caption
+msgctxt "TMEMORYBROWSER.MICODEFILTER.CAPTION"
+msgid "Code Filter"
+msgstr "代码过滤"
+
+#: tmemorybrowser.miconditionalbreak.caption
+msgid "Set/Change break condition"
+msgstr "设置/更改中断条件"
+
+#: tmemorybrowser.micopyaddressesonly.caption
+msgid "Addresses only"
+msgstr "仅地址"
+
+#: tmemorybrowser.micopybytesonly.caption
+msgid "Bytes only (no address)"
+msgstr "仅字节（无地址）"
+
+#: tmemorybrowser.midatabreakpointmenu.caption
+msgctxt "tmemorybrowser.midatabreakpointmenu.caption"
+msgid "Data Breakpoint"
+msgstr "数据断点"
+
+#: tmemorybrowser.midbvmactivatecloak.caption
+msgid "DBVM Activate Cloak"
+msgstr "DBVM 激活 Cloak"
+
+#: tmemorybrowser.midbvmdisablecloak.caption
+msgid "DBVM Disable Cloak"
+msgstr "DBVM 禁用 Cloak"
+
+#: tmemorybrowser.midebugbreak.caption
+msgctxt "TMEMORYBROWSER.MIDEBUGBREAK.CAPTION"
+msgid "Break"
+msgstr "中断"
+
+#: tmemorybrowser.midebugevents.caption
+msgid "Debug events"
+msgstr "调试事件"
+
+#: tmemorybrowser.midebugexecutetillreturn.caption
+msgid "Execute till return"
+msgstr "执行直到返回"
+
+#: tmemorybrowser.midebugrun.caption
+msgctxt "TMEMORYBROWSER.MIDEBUGRUN.CAPTION"
+msgid "Run"
+msgstr "运行"
+
+#: tmemorybrowser.midebugruntill.caption
+msgid "Run till..."
+msgstr "运行直到……"
+
+#: tmemorybrowser.midebugsetaddress.caption
+msgid "Set Address"
+msgstr "设置地址"
+
+#: tmemorybrowser.midebugstep.caption
+msgctxt "tmemorybrowser.midebugstep.caption"
+msgid "Step"
+msgstr "单步"
+
+#: tmemorybrowser.midebugstepover.caption
+msgctxt "tmemorybrowser.midebugstepover.caption"
+msgid "Step Over"
+msgstr "单步跳过"
+
+#: tmemorybrowser.midebugtogglebreakpoint.caption
+msgctxt "TMEMORYBROWSER.MIDEBUGTOGGLEBREAKPOINT.CAPTION"
+msgid "Toggle breakpoint"
+msgstr "切换断点"
+
+#: tmemorybrowser.mideletebp.caption
+msgid "Delete Breakpoint"
+msgstr "删除断点"
+
+#: tmemorybrowser.midisassemblertype.caption
+msgid "Disassembly output"
+msgstr "反汇编输出"
+
+#: tmemorybrowser.midisassembly32.caption
+msgid "32-bit"
+msgstr "32位"
+
+#: tmemorybrowser.midisassembly64.caption
+msgctxt "TMEMORYBROWSER.MIDISASSEMBLY64.CAPTION"
+msgid "64-bit"
+msgstr "64位"
+
+#: tmemorybrowser.midisassemblyautodetect.caption
+msgid "Autodetect"
+msgstr "自动检测"
+
+#: tmemorybrowser.midissectdata.caption
+msgid "Dissect data/structures old"
+msgstr "分析数据/结构（旧）"
+
+#: tmemorybrowser.midissectdata2.caption
+msgid "Dissect data/structures"
+msgstr "分析数据/结构"
+
+#: tmemorybrowser.miexceptionignorelist.caption
+msgid "Manage exception code filter"
+msgstr "管理异常代码过滤器"
+
+#: tmemorybrowser.miexceptionregionautoaddallocs.caption
+msgctxt "TMEMORYBROWSER.MIEXCEPTIONREGIONAUTOADDALLOCS.CAPTION"
+msgid "Automatically add allocated memory by CE as watched regions"
+msgstr "自动添加由CE分配的内存为监视区域"
+
+#: tmemorybrowser.miexceptionregionmanagelist.caption
+msgid "Manage exception region list"
+msgstr "管理异常区域列表"
+
+#: tmemorybrowser.mifindwhataccesses.caption
+msgctxt "tmemorybrowser.mifindwhataccesses.caption"
+msgid "Find out what accesses this address"
+msgstr "找出是什么访问这个地址"
+
+#: tmemorybrowser.mifindwhatwrites.caption
+msgid "Find out what writes this address"
+msgstr "找出是什么写入这个地址"
+
+#: tmemorybrowser.mignuassembler.caption
+msgid "GNU Assembler"
+msgstr "GNU 汇编器"
+
+#: tmemorybrowser.migotobookmark0.caption
+msgctxt "TMEMORYBROWSER.MIGOTOBOOKMARK0.CAPTION"
+msgid "Bookmark 0"
+msgstr "书签 0"
+
+#: tmemorybrowser.migotobookmark1.caption
+msgctxt "TMEMORYBROWSER.MIGOTOBOOKMARK1.CAPTION"
+msgid "Bookmark 1"
+msgstr "书签 1"
+
+#: tmemorybrowser.migotobookmark2.caption
+msgctxt "TMEMORYBROWSER.MIGOTOBOOKMARK2.CAPTION"
+msgid "Bookmark 2"
+msgstr "书签 2"
+
+#: tmemorybrowser.migotobookmark3.caption
+msgctxt "TMEMORYBROWSER.MIGOTOBOOKMARK3.CAPTION"
+msgid "Bookmark 3"
+msgstr "书签 3"
+
+#: tmemorybrowser.migotobookmark4.caption
+msgctxt "TMEMORYBROWSER.MIGOTOBOOKMARK4.CAPTION"
+msgid "Bookmark 4"
+msgstr "书签 4"
+
+#: tmemorybrowser.migotobookmark5.caption
+msgctxt "TMEMORYBROWSER.MIGOTOBOOKMARK5.CAPTION"
+msgid "Bookmark 5"
+msgstr "书签 5"
+
+#: tmemorybrowser.migotobookmark6.caption
+msgctxt "TMEMORYBROWSER.MIGOTOBOOKMARK6.CAPTION"
+msgid "Bookmark 6"
+msgstr "书签 6"
+
+#: tmemorybrowser.migotobookmark7.caption
+msgctxt "TMEMORYBROWSER.MIGOTOBOOKMARK7.CAPTION"
+msgid "Bookmark 7"
+msgstr "书签 7"
+
+#: tmemorybrowser.migotobookmark8.caption
+msgctxt "TMEMORYBROWSER.MIGOTOBOOKMARK8.CAPTION"
+msgid "Bookmark 8"
+msgstr "书签 8"
+
+#: tmemorybrowser.migotobookmark9.caption
+msgctxt "TMEMORYBROWSER.MIGOTOBOOKMARK9.CAPTION"
+msgid "Bookmark 9"
+msgstr "书签 9"
+
+#: tmemorybrowser.mihidetoolbar.caption
+msgid "Hide toolbar"
+msgstr "隐藏工具栏"
+
+#: tmemorybrowser.mihvback.caption
+msgctxt "TMEMORYBROWSER.MIHVBACK.CAPTION"
+msgid "Back"
+msgstr "返回"
+
+#: tmemorybrowser.mihvfollow.caption
+msgctxt "tmemorybrowser.mihvfollow.caption"
+msgid "Follow"
+msgstr "跟随"
+
+#: tmemorybrowser.milock.caption
+msgctxt "TMEMORYBROWSER.MILOCK.CAPTION"
+msgid "Link with other hexview"
+msgstr "与其它的十六进制视图链接"
+
+#: tmemorybrowser.milockrowsize.caption
+msgid "Lock current rowsize"
+msgstr "锁定当前行的大小"
+
+#: tmemorybrowser.miluaengine.caption
+msgctxt "TMEMORYBROWSER.MILUAENGINE.CAPTION"
+msgid "Lua Engine"
+msgstr "Lua 引擎"
+
+#: tmemorybrowser.mipaging.caption
+msgctxt "TMEMORYBROWSER.MIPAGING.CAPTION"
+msgid "Paging"
+msgstr "分页"
+
+#: tmemorybrowser.mipointerspider.caption
+msgctxt "TMEMORYBROWSER.MIPOINTERSPIDER.CAPTION"
+msgid "Structure spider"
+msgstr "结构遍历"
+
+#: tmemorybrowser.mireferencedfunctions.caption
+msgctxt "TMEMORYBROWSER.MIREFERENCEDFUNCTIONS.CAPTION"
+msgid "Referenced functions"
+msgstr "引用的函数"
+
+#: tmemorybrowser.mireplacewithnops.caption
+msgctxt "TMEMORYBROWSER.MIREPLACEWITHNOPS.CAPTION"
+msgid "Replace with code that does nothing"
+msgstr "用空指令替换"
+
+#: tmemorybrowser.mirununhandled.caption
+msgid "Run Unhandled"
+msgstr "运行未处理异常"
+
+#: tmemorybrowser.miseperators.caption
+msgid "Seperators"
+msgstr "分隔符"
+
+#: tmemorybrowser.misepevery2bytes.caption
+msgctxt "TMEMORYBROWSER.MISEPEVERY2BYTES.CAPTION"
+msgid "2 Bytes"
+msgstr "2 字节"
+
+#: tmemorybrowser.misepevery4bytes.caption
+msgctxt "TMEMORYBROWSER.MISEPEVERY4BYTES.CAPTION"
+msgid "4 Bytes"
+msgstr "4 字节"
+
+#: tmemorybrowser.misepevery8bytes.caption
+msgctxt "TMEMORYBROWSER.MISEPEVERY8BYTES.CAPTION"
+msgid "8 Bytes"
+msgstr "8 字节"
+
+#: tmemorybrowser.misetbookmark0.caption
+msgctxt "tmemorybrowser.misetbookmark0.caption"
+msgid "Bookmark 0"
+msgstr "书签 0"
+
+#: tmemorybrowser.misetbookmark1.caption
+msgctxt "tmemorybrowser.misetbookmark1.caption"
+msgid "Bookmark 1"
+msgstr "书签 1"
+
+#: tmemorybrowser.misetbookmark2.caption
+msgctxt "tmemorybrowser.misetbookmark2.caption"
+msgid "Bookmark 2"
+msgstr "书签 2"
+
+#: tmemorybrowser.misetbookmark3.caption
+msgctxt "tmemorybrowser.misetbookmark3.caption"
+msgid "Bookmark 3"
+msgstr "书签 3"
+
+#: tmemorybrowser.misetbookmark4.caption
+msgctxt "tmemorybrowser.misetbookmark4.caption"
+msgid "Bookmark 4"
+msgstr "书签 4"
+
+#: tmemorybrowser.misetbookmark5.caption
+msgctxt "tmemorybrowser.misetbookmark5.caption"
+msgid "Bookmark 5"
+msgstr "书签 5"
+
+#: tmemorybrowser.misetbookmark6.caption
+msgctxt "tmemorybrowser.misetbookmark6.caption"
+msgid "Bookmark 6"
+msgstr "书签 6"
+
+#: tmemorybrowser.misetbookmark7.caption
+msgctxt "tmemorybrowser.misetbookmark7.caption"
+msgid "Bookmark 7"
+msgstr "书签 7"
+
+#: tmemorybrowser.misetbookmark8.caption
+msgctxt "tmemorybrowser.misetbookmark8.caption"
+msgid "Bookmark 8"
+msgstr "书签 8"
+
+#: tmemorybrowser.misetbookmark9.caption
+msgctxt "tmemorybrowser.misetbookmark9.caption"
+msgid "Bookmark 9"
+msgstr "书签 9"
+
+#: tmemorybrowser.misetbreakpointdbvmexec.caption
+msgid "DBVM Breakpoint (+1 instruction)"
+msgstr "DBVM 断点（+1指令）"
+
+#: tmemorybrowser.misetbreakpointhw.caption
+msgctxt "tmemorybrowser.misetbreakpointhw.caption"
+msgid "Hardware Breakpoint"
+msgstr "硬件断点"
+
+#: tmemorybrowser.misetbreakpointpe.caption
+msgctxt "tmemorybrowser.misetbreakpointpe.caption"
+msgid "Exception Breakpoint (+1 instruction)"
+msgstr "异常断点（+1指令）"
+
+#: tmemorybrowser.misetbreakpointsw.caption
+msgctxt "tmemorybrowser.misetbreakpointsw.caption"
+msgid "Software Breakpoint"
+msgstr "软件断点"
+
+#: tmemorybrowser.misetspecificbreakpoint.caption
+msgctxt "tmemorybrowser.misetspecificbreakpoint.caption"
+msgid "Set specific breakpoint type"
+msgstr "设置指定断点类型"
+
+#: tmemorybrowser.mishowdifference.caption
+msgctxt "TMEMORYBROWSER.MISHOWDIFFERENCE.CAPTION"
+msgid "Show difference"
+msgstr "显示差异"
+
+#: tmemorybrowser.mishowindisassembler.caption
+msgid "Show in disassembler"
+msgstr "在反汇编程序显示"
+
+#: tmemorybrowser.mishowinhexview.caption
+msgid "Show in hexview"
+msgstr "在十六进制视图显示"
+
+#: tmemorybrowser.mishowrelative.caption
+msgid "Show relative addresses"
+msgstr "显示相对地址"
+
+#: tmemorybrowser.misvcopy.caption
+msgctxt "TMEMORYBROWSER.MISVCOPY.CAPTION"
+msgid "Copy"
+msgstr "复制"
+
+#: tmemorybrowser.mitextencoding16.caption
+msgctxt "tmemorybrowser.mitextencoding16.caption"
+msgid "UTF-16"
+msgstr "UTF-16"
+
+#: tmemorybrowser.mitextencodingascii.caption
+msgid "Ascii"
+msgstr "ASCII"
+
+#: tmemorybrowser.mitextencodingcodepage.caption
+msgctxt "TMEMORYBROWSER.MITEXTENCODINGCODEPAGE.CAPTION"
+msgid "Codepage"
+msgstr "代码页"
+
+#: tmemorybrowser.mitextencodingutf8.caption
+msgid "UTF-8"
+msgstr "UTF-8"
+
+#: tmemorybrowser.mitextpreferences.caption
+msgctxt "TMEMORYBROWSER.MITEXTPREFERENCES.CAPTION"
+msgid "Preferences"
+msgstr "首选项"
+
+#: tmemorybrowser.mitogglebreakpoint.caption
+msgctxt "tmemorybrowser.mitogglebreakpoint.caption"
+msgid "Set breakpoint"
+msgstr "设置断点"
+
+#: tmemorybrowser.miultimap2.caption
+msgctxt "tmemorybrowser.miultimap2.caption"
+msgid "Ultimap 2"
+msgstr "Ultimap 2"
+
+#: tmemorybrowser.miunexpectedexceptionbreakalways.caption
+msgctxt "TMEMORYBROWSER.MIUNEXPECTEDEXCEPTIONBREAKALWAYS.CAPTION"
+msgid "Always"
+msgstr "总是"
+
+#: tmemorybrowser.miunexpectedexceptionbreakifinregion.caption
+msgid "Only in specified regions"
+msgstr "仅在特定区域"
+
+#: tmemorybrowser.miunexpectedexceptionbreaknever.caption
+msgctxt "TMEMORYBROWSER.MIUNEXPECTEDEXCEPTIONBREAKNEVER.CAPTION"
+msgid "Never"
+msgstr "从不"
+
+#: tmemorybrowser.miuserdefinedcomment.caption
+msgid "Set/Change comment"
+msgstr "设置/更改注释"
+
+#: tmemorybrowser.miuserdefinedheader.caption
+msgid "Set/Change header"
+msgstr "设置/更改标题"
+
+#: tmemorybrowser.miwatchaccess.caption
+msgctxt "tmemorybrowser.miwatchaccess.caption"
+msgid "Break on Access"
+msgstr "访问时中断"
+
+#: tmemorybrowser.miwatchbpdbvm.caption
+msgctxt "tmemorybrowser.miwatchbpdbvm.caption"
+msgid "DBVM Breakpoint"
+msgstr "DBVM 断点"
+
+#: tmemorybrowser.miwatchbpexception.caption
+msgctxt "tmemorybrowser.miwatchbpexception.caption"
+msgid "Exception Breakpoint"
+msgstr "异常断点"
+
+#: tmemorybrowser.miwatchbphardware.caption
+msgctxt "tmemorybrowser.miwatchbphardware.caption"
+msgid "Hardware Breakpoint"
+msgstr "硬件断点"
+
+#: tmemorybrowser.miwatchwrite.caption
+msgctxt "tmemorybrowser.miwatchwrite.caption"
+msgid "Break on Write"
+msgstr "写入时中断"
+
+#: tmemorybrowser.modulesonly1.caption
+msgid "Modules only"
+msgstr "仅模块"
+
+#: tmemorybrowser.newwindow1.caption
+msgctxt "TMEMORYBROWSER.NEWWINDOW1.CAPTION"
+msgid "New window"
+msgstr "新建窗口"
+
+#: tmemorybrowser.nonsystemmodulesonly1.caption
+msgid "Non system modules only"
+msgstr "仅非系统模块"
+
+#: tmemorybrowser.oflabel.caption
+msgctxt "tmemorybrowser.oflabel.caption"
+msgid "OF 0"
+msgstr "OF 0"
+
+#: tmemorybrowser.onlyshowjumplineswithinrange1.caption
+msgid "Only show jumplines within range"
+msgstr "只显示范围内的跳转行"
+
+#: tmemorybrowser.opendlldialog.title
+msgid "Select the module you want to inject"
+msgstr "选择你要注入的模块"
+
+#: tmemorybrowser.pastefromclipboard1.caption
+msgid "Paste from clipboard"
+msgstr "从剪贴板粘贴"
+
+#: tmemorybrowser.pflabel.caption
+msgctxt "tmemorybrowser.pflabel.caption"
+msgid "PF 0"
+msgstr "PF 0"
+
+#: tmemorybrowser.plugins1.caption
+msgctxt "TMEMORYBROWSER.PLUGINS1.CAPTION"
+msgid "Plugins"
+msgstr "插件"
+
+#: tmemorybrowser.referencedstrings1.caption
+msgid "Referenced strings"
+msgstr "引用的字符串"
+
+#: tmemorybrowser.savedisassemledoutput1.caption
+msgctxt "TMEMORYBROWSER.SAVEDISASSEMLEDOUTPUT1.CAPTION"
+msgid "Save disassembled output"
+msgstr "保存反汇编输出"
+
+#: tmemorybrowser.savememoryregion1.caption
+msgid "Save memory region"
+msgstr "保存内存区域"
+
+#: tmemorybrowser.sbshowfloats.caption
+msgid ">"
+msgstr ">"
+
+#: tmemorybrowser.search1.caption
+msgid "Search memory..."
+msgstr "搜索内存……"
+
+#: tmemorybrowser.search2.caption
+msgctxt "TMEMORYBROWSER.SEARCH2.CAPTION"
+msgid "Search"
+msgstr "搜索"
+
+#: tmemorybrowser.sericedescriptortable1.caption
+msgid "Service Descriptor Table"
+msgstr "服务描述符表"
+
+#: tmemorybrowser.setsymbolsearchpath1.caption
+msgid "Set symbol searchpath"
+msgstr "设置符号搜索路径"
+
+#: tmemorybrowser.sflabel.caption
+msgctxt "tmemorybrowser.sflabel.caption"
+msgid "SF 0"
+msgstr "SF 0"
+
+#: tmemorybrowser.showdebugtoolbar1.caption
+msgid "Show debug toolbar"
+msgstr "显示调试工具栏"
+
+#: tmemorybrowser.showjumplines1.caption
+msgid "Show jumplines"
+msgstr "显示跳转行"
+
+#: tmemorybrowser.showmoduleaddresses1.caption
+msgid "Show module addresses"
+msgstr "显示模块地址"
+
+#: tmemorybrowser.showsymbols1.caption
+msgid "Show symbols"
+msgstr "显示符号"
+
+#: tmemorybrowser.showvaluesofstaticaddresses1.caption
+msgid "Show 'Comment' row"
+msgstr "显示'注释'行"
+
+#: tmemorybrowser.sslabel.caption
+msgctxt "tmemorybrowser.sslabel.caption"
+msgid "SS 0000"
+msgstr "SS 0000"
+
+#: tmemorybrowser.stacktrace1.caption
+msgctxt "TMEMORYBROWSER.STACKTRACE1.CAPTION"
+msgid "Stacktrace"
+msgstr "栈追踪"
+
+#: tmemorybrowser.stacktrace2.caption
+msgctxt "TMEMORYBROWSER.STACKTRACE2.CAPTION"
+msgid "Stacktrace"
+msgstr "栈追踪"
+
+#: tmemorybrowser.symbolhandler1.caption
+msgid "Userdefined symbols"
+msgstr "用户定义符号"
+
+#: tmemorybrowser.tbdebug.caption
+msgctxt "tmemorybrowser.tbdebug.caption"
+msgid "tbDebug"
+msgstr "调试工具栏"
+
+#: tmemorybrowser.tbrun.caption
+msgctxt "tmemorybrowser.tbrun.caption"
+msgid "Run"
+msgstr "运行"
+
+#: tmemorybrowser.tbseparator1.caption
+msgid "tbSeparator1"
+msgstr "tbSeparator1"
+
+#: tmemorybrowser.tbseparator2.caption
+msgid "tbSeparator2"
+msgstr "tbSeparator2"
+
+#: tmemorybrowser.tbstepinto.caption
+msgid "Step Into"
+msgstr "单步进入"
+
+#: tmemorybrowser.tbstepout.caption
+msgid "Step Out"
+msgstr "单步跳出"
+
+#: tmemorybrowser.tbstepover.caption
+msgctxt "tmemorybrowser.tbstepover.caption"
+msgid "Step Over"
+msgstr "单步跳过"
+
+#: tmemorybrowser.tbtogglebreakpoint.caption
+msgid "Toggle Breakpoint"
+msgstr "切换断点"
+
+#: tmemorybrowser.threadlist1.caption
+msgctxt "TMEMORYBROWSER.THREADLIST1.CAPTION"
+msgid "Threadlist"
+msgstr "线程列表"
+
+#: tmemorybrowser.view1.caption
+msgctxt "TMEMORYBROWSER.VIEW1.CAPTION"
+msgid "View"
+msgstr "查看"
+
+#: tmemorybrowser.watchmemoryallocations1.caption
+msgid "Watch memory allocations"
+msgstr "监视内存分配"
+
+#: tmemorybrowser.zflabel.caption
+msgctxt "tmemorybrowser.zflabel.caption"
+msgid "ZF 0"
+msgstr "ZF 0"

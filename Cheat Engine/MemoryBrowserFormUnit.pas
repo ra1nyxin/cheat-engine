@@ -843,6 +843,7 @@ resourcestring
   rsRemoveBreakpoint = 'Remove breakpoint';
   rsInjectDYLIB = 'Inject DYLIB';
   rsSetCustomAlignment = 'Set custom alignment';
+  rsRefWillBe = '(ref+*) Ref will be %x';
 
 //property functions:
 function TMemoryBrowser.getShowValues: boolean;
@@ -1756,7 +1757,7 @@ begin
     x:=symhandler.getAddressFromName(s,false,haserror);
 
     if not haserror then
-      miAddRef.caption:=format('(ref+*) Ref will be %x',[x]);
+      miAddRef.caption:=format(rsRefWillBe,[x]);
   end;
 end;
 
