@@ -611,8 +611,19 @@ var r: string;
   receivecount: integer;
   temp: pchar;
   ps: integer;
+
+  procedure consumeBinaryData(count: integer);
+  var remaining: integer;
+  begin
+    remaining:=binaryReceiveBufferPos-count;
+    if remaining>0 then
+      Move(binaryReceiveBuffer[count], binaryReceiveBuffer[0], remaining);
+    binaryReceiveBufferPos:=remaining;
+  end;
 begin
   result:=false;
+  data:=nil;
+  datalen:=0;
   if haslock<=0 then raise exception.create('ReceivePacket (binary) without lock');
 
   if binaryReceiveBuffer=nil then
@@ -683,59 +694,64 @@ begin
       begin
         if binaryreceiveBuffer[i]='#' then
         begin
+          if i+2>=binaryReceiveBufferPos then break;
           foundend:=true;
 
-          ps:=i+2-packetstart;
-          getmem(temp, ps);
+          ps:=i+3-packetstart;
+          setlength(fullpacket, ps);
+          Move(binaryReceiveBuffer[packetstart], fullpacket[1], ps);
+          consumeBinaryData(i+3);
+
+          if not checkPacket(fullpacket) then
+          begin
+            if usesAck then
+              nack;
+            break;
+          end;
+          if usesAck then
+            ack;
+
+          getmem(temp, ps-3);
 
           tpos:=0;
-          j:=packetstart+1;
-          while j<i do
+          j:=2;
+          while j<=ps-3 do
           begin
-            if (j<i+1) and (binaryReceiveBuffer[j]='}') then
+            if (j<ps-3) and (fullpacket[j]='}') then
             begin
-              temp[tpos]:=char(pbyte(@binaryReceiveBuffer[j+1])^ xor $20);
+              temp[tpos]:=char(byte(fullpacket[j+1]) xor $20);
               inc(tpos);
               inc(j,2);
             end
             else
             begin
-              temp[tpos]:=binaryReceiveBuffer[j];
+              temp[tpos]:=fullpacket[j];
               inc(tpos);
               inc(j,1);
             end;
           end;
 
-          data:=temp;
-          datalen:=tpos;
+          temp[tpos]:=#0;
 
-          if (datalen>1) and (data[0]='O') and (data[1]<>'K') then
+          if (tpos>1) and (temp[0]='O') and (temp[1]<>'K') then
           begin
-            OutputDebugString(pchar('O->'+pchar(@data[1])));
+            OutputDebugString(pchar('O->'+pchar(@temp[1])));
+            freemem(temp);
             break;
           end;
 
-          if isStopPacket(data) then
+          if isStopPacket(temp) then
           begin
             stopped:=true;
-            stoppacket:=data;
+            stoppacket:=temp;
+            freemem(temp);
             break;
           end;
 
+          data:=temp;
+          datalen:=tpos;
           result:=true;
-
-          if not usesAck then exit; //got the data
-
-          if checkPacket(pchar(@binaryReceiveBuffer[packetstart]))=false then
-          begin
-            nack; //request retransmission
-            break;
-          end
-          else
-          begin
-            ack; //everything ok
-            exit;
-          end;
+          exit;
         end;
       end;
 
