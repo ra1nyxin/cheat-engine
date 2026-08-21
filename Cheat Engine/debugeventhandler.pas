@@ -2104,39 +2104,47 @@ begin
       begin
         //OutputDebugString('After the single step of an exception caused by my page');
 
-        context^.EFlags:=eflags_setTF(context^.EFlags,0); //not needed in windows, but let's clear it anyhow
-        setContext;
+        try
+          context^.EFlags:=eflags_setTF(context^.EFlags,0); //not needed in windows, but let's clear it anyhow
+          setContext;
 
-        if singlestepping then
-          result:=SingleStep(dwContinueStatus)
-        else
-          result:=DispatchBreakpoint(breakAddress, -1, dwContinueStatus);
+          if singlestepping then
+            result:=SingleStep(dwContinueStatus)
+          else
+            result:=DispatchBreakpoint(breakAddress, -1, dwContinueStatus);
+        finally
+          try
+            //reprotect the memory
+            for i:=0 to temporaryDisabledExceptionBreakpoints.Count-1 do
+            begin
+              bp:=PBreakpoint(temporaryDisabledExceptionBreakpoints[i]);
+              if not bp^.markedfordeletion then
+                TdebuggerThread(debuggerthread).setBreakpoint(bp);
+            end;
+          finally
+            try
+              for i:=0 to temporaryDisabledExceptionBreakpoints.Count-1 do
+              begin
+                bp:=PBreakpoint(temporaryDisabledExceptionBreakpoints[i]);
+                dec(bp^.referencecount); //decrease referencecount so they can be deleted
+              end;
 
-        //reprotect the memory
+              freeandnil(temporaryDisabledExceptionBreakpoints);
+              context^.EFlags:=eflags_setRF(context^.EFlags,0);
+              setContext;
+              dwContinueStatus:=DBG_CONTINUE;
+            finally
+              SuspendThread(handle);
 
-        for i:=0 to temporaryDisabledExceptionBreakpoints.Count-1 do
-        begin
-
-          bp:=PBreakpoint(temporaryDisabledExceptionBreakpoints[i]);
-          if not bp^.markedfordeletion then
-            TdebuggerThread(debuggerthread).setBreakpoint(bp);
-
-          dec(bp^.referencecount); //decrease referencecount so they can be deleted
+              {$ifdef darwin}
+              task_resume(processhandle);
+              {$endif}
+              {$ifdef windows}
+              NtResumeProcess(processhandle);
+              {$endif}
+            end;
+          end;
         end;
-
-        context^.EFlags:=eflags_setRF(context^.EFlags,0);
-        setContext;
-
-        SuspendThread(handle);
-
-        {$ifdef darwin}
-        task_resume(processhandle);
-        {$endif}
-        {$ifdef windows}
-        NtResumeProcess(processhandle);
-        {$endif}
-        dwContinueStatus:=DBG_CONTINUE;
-        freeandnil(temporaryDisabledExceptionBreakpoints);
         exit;
       end;
 
